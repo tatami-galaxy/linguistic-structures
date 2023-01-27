@@ -13,9 +13,6 @@ dataset_name = 'universal_dependencies'
 # tasks
 tasks = ['pairwise_distance', 'tree_depth']
 
-# model, tokenizer
-model_name = 'xlm-roberta-base'
-
 
 # directories
 
@@ -49,6 +46,8 @@ if __name__ == '__main__':
     argp.add_argument('--config_list', type=list)
     # multiple configs
     argp.add_argument('--seed', type=int, default=seed)
+    # model
+    argp.add_argument('--model', type=str, default='xlm-roberta-base')
 
     # parse cli arguments
     args = argp.parse_args() 
