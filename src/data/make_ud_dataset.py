@@ -43,6 +43,9 @@ class UD:
             max_length=self.args.max_length,
             is_split_into_words=True)
 
+        # word_ids(i) maps tokenized tokens to input tokens
+        # after removing special characters
+
         # compute adj matrix
 
 
