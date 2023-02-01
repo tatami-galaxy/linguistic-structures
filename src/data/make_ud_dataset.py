@@ -3,6 +3,8 @@ import transformers
 from transformers import set_seed, AutoTokenizer
 from datasets import load_dataset
 from argparse import ArgumentParser
+import numpy as np
+from scipy.sparse.csgraph import floyd_warshall
 
 # hyperparameters
 seed = 42
@@ -12,10 +14,11 @@ max_length = 256
 dataset_name = 'universal_dependencies'
 
 # tasks
-tasks = ['pairwise_distance', 'tree_depth']
+tasks = ['node_distance', 'tree_depth']
 
 
 # directories
+processed_data_dir = '/users/ujan/linguistic-structures/data/processed/UD/'
 
 # UD class
 
@@ -27,8 +30,23 @@ class UD:
 
     # dataset mapping functions
     # get pairwise distances for sentences
-    def tree_distances(self, batch):
-        pass
+    def tree_distances(self, heads):
+        # compute adj matrix from heads
+        # floyd warshall
+        dists = []
+        batch_size = len(heads)
+        for b in range(batch_size):
+            head_list = heads[b]
+            seq_len = len(head_list)
+            graph = np.zeros((seq_len, seq_len))
+            # populate adjacency matrix
+            for s in range(seq_len):
+                if head_list[s] != 0:  # 0 is root
+                    graph[s, int(head_list[s])-1] = 1  # token id starts from 1 since 0 means root
+            # all pair shortest path 
+            dist_matrix = floyd_warshall(csgraph=graph, directed=False, unweighted=True)
+            dists.append(dist_matrix)
+        return dists
 
 
     def distance_map(self, batch):
@@ -38,26 +56,41 @@ class UD:
         text = batch['text']
         heads = batch['head']
 
-        tokenized_batch = self.tokenizer(
+        # compute true distances from heads
+        # tokenized batch -> model -> average subword embeddings -> probe -> distances
+
+        model_inputs = self.tokenizer(
             tokens, truncation=True,
             max_length=self.args.max_length,
             is_split_into_words=True)
 
-        # word_ids(i) maps tokenized tokens to input tokens
+        # true distance matrix
+        true_dists = self.tree_distances(heads) 
+        model_inputs['true_dist'] = true_dists
+
+        # model_inputs.word_ids(i) maps tokenized tokens
+        # of ith sample in batch to input tokens
         # after removing special characters
 
-        # compute adj matrix
+        return model_inputs
 
 
 
+    # process dataset given training task
+    def process_data(self, dataset_name, args):
+        tokenizer = AutoTokenizer.from_pretrained(args.model)
+        dataset = load_dataset(dataset_name, args.config)
 
-# process dataset given training task
-def process_data(self, dataset_name, config, tokenizer, task):
-    dataset = load_dataset(dataset_name, config)
-    # number of tokens in UD <= number of tokens in tokenized text
-    # need to map tokenized tokens to UD tokens
-    print(dataset)
-    quit()
+        # filter examples with None in head
+        dataset = dataset.filter(lambda example: all(h.isdigit() for h in example['head']))
+
+        # number of tokens in UD <= number of tokens in tokenized text
+        # need to map tokenized tokens to UD tokens
+        if args.task == 'node_distance':
+            # inputs_ids, attention_mask, true_dists
+            dataset = dataset.map(self.distance_map, batched=True)
+            return dataset
+
 
 
 
@@ -90,7 +123,7 @@ if __name__ == '__main__':
     print('Language set to {}'.format(args.lang))
     # training task
     if args.task is None:
-        print('specify training task with --task')
+        print('specify training task with --task, from {}'.format(tasks))
         quit()
     if args.task not in tasks:
         print('Task not supported yet. Choose from {}'.format(tasks))
@@ -106,5 +139,8 @@ if __name__ == '__main__':
     ud = UD(args)
 
     # get data and process 
-    _  = ud.process_data(dataset_name, args.config, args.task)
+    dataset = ud.process_data(dataset_name, args)
+    dataset.save_to_disk(processed_data_dir+args.config+'_'+args.task)
+
+
     
