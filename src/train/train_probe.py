@@ -3,6 +3,8 @@ import transformers
 from transformers import set_seed
 from datasets import load_dataset
 from argparse import ArgumentParser
+import torch.nn as nn
+import torch
 
 # hyperparameters
 seed = 42
@@ -11,27 +13,31 @@ seed = 42
 dataset_name = 'universal_dependencies'
 
 # tasks
-tasks = ['pairwise_distance', 'tree_depth']
+tasks = ['node_distance', 'tree_depth']
 
 
 # directories
 
 
-# dataset mapping functions
-# get pairwise distances for sentences
-def tree_distances(batch):
-    pass
-
-
-# process dataset given training task
-def process_data(dataset, task):
-    pass
-
-
-def run_probe_training():
+# distance probe class
+class DistanceProbe(nn.Module):
     
-    # get dataset
+    def __init__(self, args):
+        super(DistanceProbe, self).__init__()
+        self.args = args
+        args.model_dim = args.model_name.config.hidden_size
+        if args.probe_dim is None:  # dxd transform by default
+            self.probe_dim = args.model_dim
+        self.proj = None  # projecting transformation
+
+    
+
+
+
+# depth probe class
+class DepthProbe:
     pass
+
 
 if __name__ == '__main__':
 
@@ -47,36 +53,12 @@ if __name__ == '__main__':
     # multiple configs
     argp.add_argument('--seed', type=int, default=seed)
     # model
-    argp.add_argument('--model', type=str, default='xlm-roberta-base')
+    argp.add_argument('--model_name', type=str, default='xlm-roberta-base')
+    # probe dimension
+    argp.add_argument('--probe_dim', type=int, default=None)
 
     # parse cli arguments
     args = argp.parse_args() 
-
-    # training language
-    print('Language set to {}'.format(args.lang))
-    # training task
-    if args.task is None:
-        print('specify training task with --task')
-        quit()
-    if args.task not in tasks:
-        print('Task not supported yet. Choose from {}'.format(tasks))
-        quit()
-    # treebank config
-    # support for merging multiple treebanks
-    if args.config_list is not None:
-        pass
-    else:
-        print('Using config {}'.format(args.config))
- 
-    # seed
-    set_seed(args.seed)
-
-    # maybe make processed dataset separately?
-    # data
-    dataset = load_dataset(dataset_name, args.config)
-
-    # process dataset
-    process_data(dataset, args.task)
     
 
     #run_probe_training()

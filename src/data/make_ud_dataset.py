@@ -26,7 +26,7 @@ class UD:
 
     def __init__(self, args):
         self.args = args
-        self.tokenizer = AutoTokenizer.from_pretrained(args.model)
+        self.tokenizer = AutoTokenizer.from_pretrained(args.model_name)
 
     # dataset mapping functions
     # get pairwise distances for sentences
@@ -43,7 +43,7 @@ class UD:
             for s in range(seq_len):
                 if head_list[s] != 0:  # 0 is root
                     graph[s, int(head_list[s])-1] = 1  # token id starts from 1 since 0 means root
-            # all pair shortest path 
+            # all pair shortest paths
             dist_matrix = floyd_warshall(csgraph=graph, directed=False, unweighted=True)
             dists.append(dist_matrix)
         return dists
@@ -109,7 +109,7 @@ if __name__ == '__main__':
     # multiple configs
     argp.add_argument('--seed', type=int, default=seed)
     # model
-    argp.add_argument('--model', type=str, default='xlm-roberta-base')
+    argp.add_argument('--model_name', type=str, default='xlm-roberta-base')
     # max length
     argp.add_argument('--max_length', type=int, default=max_length)
 
@@ -139,8 +139,13 @@ if __name__ == '__main__':
     ud = UD(args)
 
     # get data and process 
+    print('Processing data')
     dataset = ud.process_data(dataset_name, args)
+
+    # save to disk
+    print('Saving processed data')
     dataset.save_to_disk(processed_data_dir+args.config+'_'+args.task)
+    print('Done')
 
 
     
