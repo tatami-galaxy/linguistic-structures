@@ -59,6 +59,8 @@ if __name__ == '__main__':
 
     # parse cli arguments
     args = argp.parse_args() 
+
+    # test probe projection computation
     
 
     #run_probe_training()
