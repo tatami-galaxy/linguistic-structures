@@ -1,4 +1,6 @@
 # imports
+import os
+from os.path import dirname, abspath
 import transformers
 from transformers import set_seed, AutoTokenizer
 from datasets import load_dataset
@@ -18,7 +20,13 @@ tasks = ['node_distance', 'tree_depth']
 
 
 # directories
-processed_data_dir = '/users/ujan/linguistic-structures/data/processed/UD/'
+
+# get root directory
+root = abspath(__file__)
+while root.split('/')[-1] != 'linguistic-structures':
+    root = dirname(root)
+    
+processed_data_dir = root+'/data/processed/UD/'
 
 # UD class
 
