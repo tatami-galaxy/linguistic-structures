@@ -13,6 +13,9 @@ import torch
 from torch.utils.data import DataLoader
 from scipy.sparse.csgraph import floyd_warshall
 from dataclasses import dataclass
+from torch.optim import AdamW
+from transformers import get_scheduler
+from tqdm.auto import tqdm
 
 # directories
 
@@ -63,6 +66,7 @@ class DataCollatorWithPadding:
             "attention_mask": feature["attention_mask"]} for feature in features]
         label_features = [{"true_dist": feature["true_dist"]} for feature in features]
 
+
         batch = self.tokenizer.pad(
             input_features,
             padding=self.padding,
@@ -70,14 +74,23 @@ class DataCollatorWithPadding:
         )
 
         # pad true_dist
-        print(type(label_features))
-        print(type(label_features[0]))
-        print(label_features[0].keys())
-        print(type(label_features[0]['true_dist']))
-        print(label_features[0]['true_dist'])
-        print(len(label_features))
-        quit()
-
+        # label_features -> list (len = batch_size) of dicts
+        # dict -> 'true_dist' : list (len = seq_len x seq_len) of distances (float)
+        # tokenizer.pad_token_id = 1
+        lens = [len(x['true_dist']) for x in label_features]
+        max_len = max(lens)
+        attentions = []
+        # extending to the longest example with pad token ids
+        for i in range(len(lens)): # len(lens) = batch_size 
+            attentions.append([1]*lens[i]) # 1s for true length in mask
+            # extend to max len with pad token id (1)
+            label_features[i]['true_dist'].extend([tokenizer.pad_token_id]*(max_len-lens[i])) 
+            # extend attention to max len with 0s
+            attentions[i].extend([0]*(max_len-lens[i]))
+        
+        # convert to tensors
+        batch["labels"] = torch.Tensor([label_features[i]['true_dist'] for i in range(len(lens))])
+        batch["label_attention_mask"] = torch.Tensor([attentions[i] for i in range(len(lens))])
 
         return batch
 
@@ -294,7 +307,7 @@ if __name__ == '__main__':
 
     print('data collator with padding')
     # data colator
-    data_collator = DataCollatorWithPadding(tokenizer=tokenizer, padding=True, return_tensors='pt')
+    data_collator = DataCollatorWithPadding(tokenizer=tokenizer)
 
     # data loader
     dataloader = DataLoader(
@@ -303,8 +316,8 @@ if __name__ == '__main__':
         batch_size=args.train_batch_size,
     )
 
-    batch = next(iter(dataloader))
-    print(batch)
+    # model
+
 
     
 
