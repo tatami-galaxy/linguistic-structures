@@ -2,7 +2,7 @@
 import os
 from os.path import dirname, abspath
 from typing import Any, Dict, List, Optional
-from transformers import AutoTokenizer
+from transformers import AutoTokenizer, XLMRobertaModel
 from transformers import set_seed
 from datasets import load_dataset, load_from_disk
 import argparse
@@ -181,17 +181,18 @@ class UD:
 # distance probe class
 class DistanceProbe(nn.Module):
     
-    def __init__(self, args):
+    def __init__(self, model_dim, probe_rank):
         super(DistanceProbe, self).__init__()
-        self.args = args
-        self.model_dim = args.model_name.config.hidden_size
+        self.model_dim = model_dim
+        self.probe_rank = probe_rank
         if args.probe_rank is None:  # dxd transform by default
             self.probe_rank = self.model_dim
         self.proj = nn.Parameter(data = torch.zeros(self.model_dim, self.probe_rank))  # projecting transformation # device?
         nn.init.uniform_(self.proj, -0.05, 0.05)
 
-    def forward(self, batch):
-        transformed = torch.matmul(batch, self.proj) # b,s,r
+    # get
+    def forward(self, input_ids):
+        transformed = torch.matmul(input_ids, self.proj) # b,s,r
         batchlen, seqlen, rank = transformed.size()
         transformed = transformed.unsqueeze(2) # b, s, 1, r
         transformed = transformed.expand(-1, -1, seqlen, -1) # b, s, s, r
@@ -200,6 +201,45 @@ class DistanceProbe(nn.Module):
         squared_diffs = diffs.pow(2) # b, s, s, r
         squared_distances = torch.sum(squared_diffs, -1) # b, s, s
         return squared_distances
+
+
+# L1 loss for distance matrices
+class L1DistanceLoss(nn.Module):
+
+    def __init__(self, args):
+        super(L1DistanceLoss, self).__init__()
+        self.args = args
+        self.word_pair_dims = (1,2)
+
+    def forward(self, predictions, label_batch, length_batch):
+        """ Computes L1 loss on distance matrices.
+
+        Ignores all entries where label_batch=-1
+        Normalizes first within sentences (by dividing by the square of the sentence length)
+        and then across the batch.
+
+        Args:
+        predictions: A pytorch batch of predicted distances
+        label_batch: A pytorch batch of true distances
+        length_batch: A pytorch batch of sentence lengths
+
+        Returns:
+        A tuple of:
+            batch_loss: average loss in the batch
+            total_sents: number of sentences in the batch
+        """
+        labels_1s = (label_batch != -1).float()
+        predictions_masked = predictions * labels_1s
+        labels_masked = label_batch * labels_1s
+        total_sents = torch.sum((length_batch != 0)).float()
+        squared_lengths = length_batch.pow(2).float()
+        if total_sents > 0:
+            loss_per_sent = torch.sum(torch.abs(predictions_masked - labels_masked), dim=self.word_pair_dims)
+            normalized_loss_per_sent = loss_per_sent / squared_lengths
+            batch_loss = torch.sum(normalized_loss_per_sent) / total_sents
+        else:
+            batch_loss = torch.tensor(0.0, device=self.args['device'])
+        return batch_loss, total_sents
 
     
 
@@ -317,8 +357,29 @@ if __name__ == '__main__':
     )
 
     # model
+    # a base model without any specific head
+    model = XLMRobertaModel.from_pretrained(args.model_name)
+
+    # probe
+    print('intializing probe for task : {}'.format(args.task))
+    # need to load model first for this
+    probe = DistanceProbe(model.config.hidden_size, args.probe_rank)
+
+    batch = next(iter(dataloader))
+    outputs = model(
+        input_ids=batch['input_ids'],
+        attention_mask=batch['attention_mask'],
+        output_hidden_states=True)
+
+    # which layer to use?
+    # compute loss
+    # need to un-flatten true distance matrix
+
+    rep = outputs.last_hidden_state
+    print(rep.shape)
+    pred_dist = probe(rep)
+    print(pred_dist.shape)
 
 
     
 
-    #run_probe_training()
