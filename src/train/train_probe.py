@@ -2,7 +2,7 @@
 import os
 from os.path import dirname, abspath
 from typing import Any, Dict, List, Optional
-from transformers import AutoTokenizer, XLMRobertaModel
+from transformers import XLMRobertaTokenizerFast, XLMRobertaModel
 from transformers import set_seed
 from datasets import load_dataset, load_from_disk
 import argparse
@@ -13,9 +13,7 @@ import torch
 from torch.utils.data import DataLoader
 from scipy.sparse.csgraph import floyd_warshall
 from dataclasses import dataclass
-from torch.optim import AdamW
-from transformers import get_scheduler
-from tqdm.auto import tqdm
+import math
 
 # directories
 
@@ -53,9 +51,29 @@ class DataCollatorWithPadding:
             The type of Tensor to return. Allowable values are "np", "pt" and "tf".
     """
 
-    tokenizer: AutoTokenizer
+    tokenizer: XLMRobertaTokenizerFast
     padding: bool = True
     return_tensors: str = "pt"
+
+    # custom padding function
+    def custom_pad(self, key, features, pad_token_id):
+        lens = [len(x[key]) for x in features]
+        max_len = max(lens)
+        attentions = []
+        # extending to the longest example with pad token ids
+        for i in range(len(lens)): # len(lens) = batch_size 
+            attentions.append([1]*lens[i]) # 1s for true length in mask
+            # extend to max len with pad token id (1)
+            features[i][key].extend([pad_token_id]*(max_len-lens[i])) 
+            # extend attention to max len with 0s
+            attentions[i].extend([0]*(max_len-lens[i]))
+
+        feature_tensors = torch.Tensor([features[i][key] for i in range(len(lens))])
+        attention_tensors = torch.Tensor([attentions[i] for i in range(len(lens))])
+
+        return feature_tensors, attention_tensors
+
+
 
     def __call__(self, features: List[Dict[str, Any]]) -> Dict[str, Any]:
 
@@ -66,6 +84,7 @@ class DataCollatorWithPadding:
             "attention_mask": feature["attention_mask"]} for feature in features]
         label_features = [{"true_dist": feature["true_dist"]} for feature in features]
 
+        word_ids = [{"word_ids": feature["word_ids"]} for feature in features]
 
         batch = self.tokenizer.pad(
             input_features,
@@ -74,10 +93,20 @@ class DataCollatorWithPadding:
         )
 
         # pad true_dist
+
+        ## refactor into a function ##
+
         # label_features -> list (len = batch_size) of dicts
         # dict -> 'true_dist' : list (len = seq_len x seq_len) of distances (float)
         # tokenizer.pad_token_id = 1
-        lens = [len(x['true_dist']) for x in label_features]
+
+        #batch["labels"], batch["label_mask"] = self.custom_pad('true_dist', label_features, tokenizer.pad_token_id)
+        # -100 for None (special tokens) and padding
+        batch["labels"], batch["label_mask"] = self.custom_pad('true_dist', label_features, -100)
+        batch["word_ids"], _ = self.custom_pad('word_ids', word_ids, -100)
+        #batch["word_ids"], batch["word_ids_mask"] = self.custom_pad('word_ids', word_ids, -100)
+
+        """lens = [len(x['true_dist']) for x in label_features]
         max_len = max(lens)
         attentions = []
         # extending to the longest example with pad token ids
@@ -90,7 +119,7 @@ class DataCollatorWithPadding:
         
         # convert to tensors
         batch["labels"] = torch.Tensor([label_features[i]['true_dist'] for i in range(len(lens))])
-        batch["label_attention_mask"] = torch.Tensor([attentions[i] for i in range(len(lens))])
+        batch["label_attention_mask"] = torch.Tensor([attentions[i] for i in range(len(lens))])"""
 
         return batch
 
@@ -99,9 +128,9 @@ class DataCollatorWithPadding:
 
 class UD:
 
-    def __init__(self, args):
+    def __init__(self, args, tokenizer):
         self.args = args
-        self.tokenizer = AutoTokenizer.from_pretrained(args.model_name)
+        self.tokenizer = tokenizer
 
     # dataset mapping functions
     # get pairwise distances for sentences
@@ -146,6 +175,12 @@ class UD:
             tokens, truncation=True,
             max_length=self.args.max_length,
             is_split_into_words=True)
+        
+        # store word ids
+        # -100 for None. maybe something else?
+        
+        word_ids = [[-100 if x is None else x for x in model_inputs.word_ids(i)] for i in range(len(model_inputs['input_ids']))]
+        model_inputs['word_ids'] = word_ids
 
         # true distance matrix
         true_dists = self.tree_distances(heads) 
@@ -163,7 +198,6 @@ class UD:
 
     # process dataset given training task
     def process_data(self, args):
-        tokenizer = AutoTokenizer.from_pretrained(args.model_name)
         dataset = load_dataset(args.dataset_name, args.config)
 
         # filter examples with None in head
@@ -173,7 +207,7 @@ class UD:
         # need to map tokenized tokens to UD tokens
         if args.task == 'node_distance':
             # inputs_ids, attention_mask, true_dists
-            dataset = dataset.map(self.distance_map, batched=True, remove_columns=dataset['test'].column_names)
+            dataset = dataset.map(self.distance_map, batched=True, batch_size=4, remove_columns=dataset['test'].column_names)
             return dataset
 
 
@@ -190,9 +224,25 @@ class DistanceProbe(nn.Module):
         self.proj = nn.Parameter(data = torch.zeros(self.model_dim, self.probe_rank))  # projecting transformation # device?
         nn.init.uniform_(self.proj, -0.05, 0.05)
 
-    # get
-    def forward(self, input_ids):
-        transformed = torch.matmul(input_ids, self.proj) # b,s,r
+    
+    def forward(self, hidden_state, word_ids, attention_mask):
+
+        # hidden_state -> b, s', d
+        # word_ids -> b, s'
+        # attention mask -> b, s'
+
+        print(word_ids[0][word_ids[0] != -100].shape)
+        quit()
+
+        u, i, c = torch.unique_consecutive(word_ids[0], return_inverse=True, return_counts = True)
+        print(u.shape)
+        print(i.shape)
+        print(c.shape)
+        quit()
+
+        # average embeddings here
+
+        transformed = torch.matmul(hidden_state, self.proj) # b,s,r
         batchlen, seqlen, rank = transformed.size()
         transformed = transformed.unsqueeze(2) # b, s, 1, r
         transformed = transformed.expand(-1, -1, seqlen, -1) # b, s, s, r
@@ -266,6 +316,8 @@ if __name__ == '__main__':
     argp.add_argument('--train_batch_size', type=int, default=16)
     # eval batch size
     argp.add_argument('--eval_batch_size', type=int, default=8)
+    # embedding layer to use for projection
+    argp.add_argument('--embed_layer', type=int, default=6)
 
 
     ## Data Args ##
@@ -320,8 +372,13 @@ if __name__ == '__main__':
         print('using config {}'.format(args.config))
 
 
+    # tokenizer
+    print('loading tokenizer {}'.format(args.model_name))
+    tokenizer = XLMRobertaTokenizerFast.from_pretrained(args.model_name)
+
+
     # UD processing class
-    ud = UD(args)
+    ud = UD(args, tokenizer)
 
     # check if proecssed data exists
     processed_data_dir = args.processed_data_dir+args.config+'_'+args.task
@@ -340,13 +397,11 @@ if __name__ == '__main__':
             dataset.save_to_disk(processed_data_dir)
             print('saved')
 
+    # dataset -> input_ids, attention_mask, labels, label_mask, word_ids
 
-    # tokenizer
-    print('loading tokenizer {}'.format(args.model_name))
-    tokenizer = AutoTokenizer.from_pretrained(args.model_name)
 
     print('data collator with padding')
-    # data colator
+    # data colator -> input_ids, attention_mask, labels, label_mask, word_ids
     data_collator = DataCollatorWithPadding(tokenizer=tokenizer)
 
     # data loader
@@ -365,20 +420,38 @@ if __name__ == '__main__':
     # need to load model first for this
     probe = DistanceProbe(model.config.hidden_size, args.probe_rank)
 
+
+    # compute loss
+    ### average over sub word embeddings before probe ###
+
+
+
     batch = next(iter(dataloader))
+
+    labels = batch['labels'].reshape(args.train_batch_size, int(math.sqrt(batch['labels'].shape[-1])), -1)
+    label_mask = batch['label_mask'].reshape(args.train_batch_size, int(math.sqrt(batch['label_mask'].shape[-1])), -1)
+
+    print(labels[0])
+    quit()
+
+    print(labels[0][labels[0] != -100].shape)
+
     outputs = model(
         input_ids=batch['input_ids'],
         attention_mask=batch['attention_mask'],
         output_hidden_states=True)
 
-    # which layer to use?
-    # compute loss
-    # need to un-flatten true distance matrix
 
+    #print(batch['input_ids'].shape)
     rep = outputs.last_hidden_state
-    print(rep.shape)
-    pred_dist = probe(rep)
-    print(pred_dist.shape)
+    pred_dist = probe(rep, batch['word_ids'], batch['attention_mask'])
+    #print(pred_dist.shape)
+    #labels = batch['labels'].reshape(args.train_batch_size, int(math.sqrt(batch['labels'].shape[-1])), -1)
+    #print(labels.shape)
+
+
+    #print(batch[''])
+
 
 
     
