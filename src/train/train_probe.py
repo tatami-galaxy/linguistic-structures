@@ -224,15 +224,42 @@ class DistanceProbe(nn.Module):
         self.proj = nn.Parameter(data = torch.zeros(self.model_dim, self.probe_rank))  # projecting transformation # device?
         nn.init.uniform_(self.proj, -0.05, 0.05)
 
+
+    def del_embeds(self, hidden, ids):
+        new_hidden = hidden[:ids[0]]
+        prev_id = ids[0]
+        for i in range(1, len(ids)):
+            new_hidden = torch.cat((new_hidden, hidden[prev_id+1:ids[i]]))
+            prev_id = ids[i]
+        return new_hidden
+
+    def re_pad(self):
+        pass
+
     
     def forward(self, hidden_state, word_ids, attention_mask):
 
         # hidden_state -> b, s', d
-        # word_ids -> b, s'
-        # attention mask -> b, s'
+        # word_ids -> b, s' # -100 for both padding and special tokens
+        # attention mask -> b, s' # will not mask out special tokens
 
-        print(word_ids[0][word_ids[0] != -100].shape)
-        quit()
+        for i in range(hidden_state.shape[0]):
+            h = hidden_state[i] # s', d
+            # del -100 tokens
+            word_id = word_ids[i][word_ids[i] != -100]
+            # ids for which we dont want the embedding (special tokens and pad)
+            del_ids = (word_ids[i] == -100).nonzero(as_tuple=True)[0].tolist()
+            # del those embeddings 
+            h_new = self.del_embeds(h, del_ids) # s+duplicates, d
+
+            # average over subword embeddings
+            #u = torch.unique_consecutive(word_id)
+            
+
+
+            quit()
+
+            
 
         u, i, c = torch.unique_consecutive(word_ids[0], return_inverse=True, return_counts = True)
         print(u.shape)
@@ -428,13 +455,17 @@ if __name__ == '__main__':
 
     batch = next(iter(dataloader))
 
+
+    test = batch['labels'][0][batch['labels'][0] != -100]
+    test = test.reshape(int(math.sqrt(test.shape[-1])), -1)
+    #print(test)
+    print(test.shape)
+
+
     labels = batch['labels'].reshape(args.train_batch_size, int(math.sqrt(batch['labels'].shape[-1])), -1)
     label_mask = batch['label_mask'].reshape(args.train_batch_size, int(math.sqrt(batch['label_mask'].shape[-1])), -1)
 
-    print(labels[0])
-    quit()
 
-    print(labels[0][labels[0] != -100].shape)
 
     outputs = model(
         input_ids=batch['input_ids'],
