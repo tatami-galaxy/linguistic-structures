@@ -502,31 +502,9 @@ if __name__ == '__main__':
 
 
 
-
-
-    batch = next(iter(dataloader))
-
-    inputs = batch['input_ids']
-    attention_mask = batch['attention_mask']
-    labels = batch['labels']  # -100 pad
-    label_mask = batch['label_mask']
-    lens = batch['lens']
-
-    outputs = model(
-        input_ids=inputs,
-        attention_mask=attention_mask,
-        output_hidden_states=True
-    )
-
-
-    rep = outputs.last_hidden_state
-    pred_dist = probe(rep, batch['word_ids'], label_mask, label_mask.shape[-1])
-
-
-    # compute loss 
-    l1 = L1DistanceLoss(args)
-    loss = l1(pred_dist, labels, label_mask, lens)
-    print(loss)
+# train for longer
+# higher lr
+# eval
 
 
 
