@@ -56,23 +56,29 @@ class DataCollatorWithPadding:
     return_tensors: str = "pt"
 
     # custom padding function
+    ##### fix #####
     def custom_pad(self, key, features, pad_token_id):
         lens = [len(x[key]) for x in features]
+        input_list = []
+        mask_list = []
         max_len = max(lens)
-        attentions = []
-        # extending to the longest example with pad token ids
         for i in range(len(lens)): # len(lens) = batch_size 
-            attentions.append([1]*lens[i]) # 1s for true length in mask
-            # extend to max len with pad token id (1)
-            features[i][key].extend([pad_token_id]*(max_len-lens[i])) 
-            # extend attention to max len with 0s
-            attentions[i].extend([0]*(max_len-lens[i]))
+            inputs = torch.tensor(features[i][key])
+            mask = torch.ones(inputs.shape) # 1 for true positions
 
-        feature_tensors = torch.Tensor([features[i][key] for i in range(len(lens))])
-        attention_tensors = torch.Tensor([attentions[i] for i in range(len(lens))])
+            if len(inputs.shape) == 2:  # distance matrix 
+                inputs = nn.functional.pad(inputs, (0, max_len-lens[i], 0, max_len-lens[i]), value=pad_token_id)
+                mask = nn.functional.pad(mask, (0, max_len-lens[i], 0, max_len-lens[i])) # pad 0 by default
+            elif len(inputs.shape) == 1: # array
+                inputs = nn.functional.pad(inputs, (0, max_len-lens[i]), value=pad_token_id)
+                mask = nn.functional.pad(mask, (0, max_len-lens[i])) # pad 0 by default
+            input_list.append(inputs)
+            mask_list.append(mask)
 
-        return feature_tensors, attention_tensors
+        labels = torch.stack(input_list)
+        label_mask = torch.stack(mask_list)
 
+        return labels, label_mask
 
 
     def __call__(self, features: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -94,32 +100,13 @@ class DataCollatorWithPadding:
 
         # pad true_dist
 
-        ## refactor into a function ##
-
         # label_features -> list (len = batch_size) of dicts
         # dict -> 'true_dist' : list (len = seq_len x seq_len) of distances (float)
         # tokenizer.pad_token_id = 1
-
-        #batch["labels"], batch["label_mask"] = self.custom_pad('true_dist', label_features, tokenizer.pad_token_id)
         # -100 for None (special tokens) and padding
+        # 1 for true and 0 for pad in mask
         batch["labels"], batch["label_mask"] = self.custom_pad('true_dist', label_features, -100)
         batch["word_ids"], _ = self.custom_pad('word_ids', word_ids, -100)
-        #batch["word_ids"], batch["word_ids_mask"] = self.custom_pad('word_ids', word_ids, -100)
-
-        """lens = [len(x['true_dist']) for x in label_features]
-        max_len = max(lens)
-        attentions = []
-        # extending to the longest example with pad token ids
-        for i in range(len(lens)): # len(lens) = batch_size 
-            attentions.append([1]*lens[i]) # 1s for true length in mask
-            # extend to max len with pad token id (1)
-            label_features[i]['true_dist'].extend([tokenizer.pad_token_id]*(max_len-lens[i])) 
-            # extend attention to max len with 0s
-            attentions[i].extend([0]*(max_len-lens[i]))
-        
-        # convert to tensors
-        batch["labels"] = torch.Tensor([label_features[i]['true_dist'] for i in range(len(lens))])
-        batch["label_attention_mask"] = torch.Tensor([attentions[i] for i in range(len(lens))])"""
 
         return batch
 
@@ -153,10 +140,9 @@ class UD:
             # each matrix will be seq_len x seq_len
             # seq_len varies
             # need to pad into a batch
-            # convert to numpy and flatten
-            dist_matrix_f = np.array(dist_matrix).flatten()
+            #dist_matrix_f = torch.tensor(dist_matrix)
 
-            dists.append(dist_matrix_f.tolist())
+            dists.append(dist_matrix)
 
         return dists
 
@@ -207,7 +193,7 @@ class UD:
         # need to map tokenized tokens to UD tokens
         if args.task == 'node_distance':
             # inputs_ids, attention_mask, true_dists
-            dataset = dataset.map(self.distance_map, batched=True, batch_size=4, remove_columns=dataset['test'].column_names)
+            dataset = dataset.map(self.distance_map, batched=True, remove_columns=dataset['test'].column_names)
             return dataset
 
 
@@ -233,15 +219,43 @@ class DistanceProbe(nn.Module):
             prev_id = ids[i]
         return new_hidden
 
-    def re_pad(self):
-        pass
+
+    def avg_embed(self, hidden, word_id):
+        # get unique counts
+        _, c = torch.unique_consecutive(word_id, return_counts=True)
+        embed_list = []
+        h_i = 0
+        for i in range(c.shape[0]):
+            if c[i] > 1:
+                to_avg = hidden[h_i:h_i+c[i]]
+                avgd = torch.mean(to_avg, dim=0) # d dimensional
+                embed_list.append(avgd)
+                h_i += c[i]
+            else:
+                embed_list.append(hidden[h_i])
+                h_i += 1
+
+        return torch.stack(embed_list)
+
+
+    def re_pad(self, hidden_state, max_len):
+        new_hidden_state = []
+        for i in range(len(hidden_state)):
+            s = hidden_state[i].shape[0] # length of the current sequence
+            h_new = nn.functional.pad(hidden_state[i], (0, 0, 0, max_len-s)) # pad to max_len
+            new_hidden_state.append(h_new)
+
+        new_hidden_state = torch.stack(new_hidden_state)
+        return new_hidden_state
 
     
-    def forward(self, hidden_state, word_ids, attention_mask):
+    def forward(self, hidden_state, word_ids, label_mask, max_len):
 
         # hidden_state -> b, s', d
         # word_ids -> b, s' # -100 for both padding and special tokens
         # attention mask -> b, s' # will not mask out special tokens
+
+        new_hidden_state = []
 
         for i in range(hidden_state.shape[0]):
             h = hidden_state[i] # s', d
@@ -253,23 +267,15 @@ class DistanceProbe(nn.Module):
             h_new = self.del_embeds(h, del_ids) # s+duplicates, d
 
             # average over subword embeddings
-            #u = torch.unique_consecutive(word_id)
-            
+            h_final = self.avg_embed(h_new, word_id) # s, d (s seq length for the example)
+
+            new_hidden_state.append(h_final)
+
+        # pad to max length in batch
+        new_hidden_state = self.re_pad(new_hidden_state, max_len) # b, s, d 
 
 
-            quit()
-
-            
-
-        u, i, c = torch.unique_consecutive(word_ids[0], return_inverse=True, return_counts = True)
-        print(u.shape)
-        print(i.shape)
-        print(c.shape)
-        quit()
-
-        # average embeddings here
-
-        transformed = torch.matmul(hidden_state, self.proj) # b,s,r
+        transformed = torch.matmul(new_hidden_state, self.proj) # b,s,r
         batchlen, seqlen, rank = transformed.size()
         transformed = transformed.unsqueeze(2) # b, s, 1, r
         transformed = transformed.expand(-1, -1, seqlen, -1) # b, s, s, r
@@ -277,6 +283,11 @@ class DistanceProbe(nn.Module):
         diffs = transformed - transposed # b, s, s, r
         squared_diffs = diffs.pow(2) # b, s, s, r
         squared_distances = torch.sum(squared_diffs, -1) # b, s, s
+
+        # mask out useless values to zero (maybe later?)
+        squared_distances = squared_distances * label_mask
+        
+
         return squared_distances
 
 
@@ -448,40 +459,19 @@ if __name__ == '__main__':
     probe = DistanceProbe(model.config.hidden_size, args.probe_rank)
 
 
-    # compute loss
-    ### average over sub word embeddings before probe ###
-
-
-
     batch = next(iter(dataloader))
-
-
-    test = batch['labels'][0][batch['labels'][0] != -100]
-    test = test.reshape(int(math.sqrt(test.shape[-1])), -1)
-    #print(test)
-    print(test.shape)
-
-
-    labels = batch['labels'].reshape(args.train_batch_size, int(math.sqrt(batch['labels'].shape[-1])), -1)
-    label_mask = batch['label_mask'].reshape(args.train_batch_size, int(math.sqrt(batch['label_mask'].shape[-1])), -1)
-
-
 
     outputs = model(
         input_ids=batch['input_ids'],
         attention_mask=batch['attention_mask'],
-        output_hidden_states=True)
+        output_hidden_states=True
+    )
 
-
-    #print(batch['input_ids'].shape)
     rep = outputs.last_hidden_state
-    pred_dist = probe(rep, batch['word_ids'], batch['attention_mask'])
-    #print(pred_dist.shape)
-    #labels = batch['labels'].reshape(args.train_batch_size, int(math.sqrt(batch['labels'].shape[-1])), -1)
-    #print(labels.shape)
+    pred_dist = probe(rep, batch['word_ids'], batch['label_mask'], batch["label_mask"].shape[-1])
 
+    # compute loss nextr
 
-    #print(batch[''])
 
 
 
