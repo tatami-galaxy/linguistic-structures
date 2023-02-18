@@ -3,6 +3,8 @@ import os
 from os.path import dirname, abspath
 from typing import Any, Dict, List, Optional
 from transformers import XLMRobertaTokenizerFast, XLMRobertaModel
+from transformers import AdamW
+from transformers import get_scheduler
 from transformers import set_seed
 from datasets import load_dataset, load_from_disk
 import argparse
@@ -13,7 +15,7 @@ import torch
 from torch.utils.data import DataLoader
 from scipy.sparse.csgraph import floyd_warshall
 from dataclasses import dataclass
-import math
+from tqdm.auto import tqdm
 
 # directories
 
@@ -330,6 +332,8 @@ if __name__ == '__main__':
     argp.add_argument('--max_length', type=int, default=256)
     # training task
     argp.add_argument('--task', type=str, default='node_distance')
+    # epochs
+    argp.add_argument('--num_train_epochs', type=int, default=3)
     # train batch size
     argp.add_argument('--train_batch_size', type=int, default=16)
     # eval batch size
@@ -437,6 +441,67 @@ if __name__ == '__main__':
     print('intializing probe for task : {}'.format(args.task))
     # need to load model first for this
     probe = DistanceProbe(model.config.hidden_size, args.probe_rank)
+
+    # loss function
+    l1 = L1DistanceLoss(args)
+
+    # optimizer
+    # training probe only
+    optimizer = AdamW(probe.parameters(), lr=5e-5)
+
+    # train steps and scheduler
+    num_training_steps = args.num_train_epochs * len(dataloader)
+    lr_scheduler = get_scheduler(
+        "linear",
+        optimizer=optimizer,
+        num_warmup_steps=0,
+        num_training_steps=num_training_steps,
+    )
+    print('train steps : {}'.format(num_training_steps))
+
+    # device
+    device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+    model.to(device)
+
+    # train loop
+
+    progress_bar = tqdm(range(num_training_steps))
+    model.train()
+
+    for epoch in range(args.num_train_epochs):
+        loss_val = 0
+        for batch in dataloader:
+            inputs = batch['input_ids'].to(device)
+            attention_mask = batch['attention_mask'].to(device)
+            labels = batch['labels'].to(device)  # -100 pad
+            label_mask = batch['label_mask'].to(device)
+            word_ids = batch['word_ids'].to(device)
+            lens = batch['lens'].to(device)
+
+            outputs = model(
+                input_ids=inputs,
+                attention_mask=attention_mask,
+                output_hidden_states=True
+            )
+
+            rep = outputs.last_hidden_state ## change to layer rep
+            pred_dist = probe(rep, word_ids, label_mask, label_mask.shape[-1])
+
+            # loss
+            loss = l1(pred_dist, labels, label_mask, lens)
+            loss_val += loss.item()
+
+            loss.backward()
+
+            optimizer.step()
+            lr_scheduler.step()
+            optimizer.zero_grad()
+            progress_bar.update(1)
+
+        print(loss_val/len(dataloader))
+
+
+
 
 
     batch = next(iter(dataloader))
