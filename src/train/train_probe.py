@@ -58,7 +58,7 @@ class DataCollatorWithPadding:
     # custom padding function
     ##### fix #####
     def custom_pad(self, key, features, pad_token_id):
-        lens = [len(x[key]) for x in features]
+        lens = [len(x[key]) for x in features] # true lens
         input_list = []
         mask_list = []
         max_len = max(lens)
@@ -78,7 +78,7 @@ class DataCollatorWithPadding:
         labels = torch.stack(input_list)
         label_mask = torch.stack(mask_list)
 
-        return labels, label_mask
+        return labels, label_mask, torch.tensor(lens)
 
 
     def __call__(self, features: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -105,8 +105,8 @@ class DataCollatorWithPadding:
         # tokenizer.pad_token_id = 1
         # -100 for None (special tokens) and padding
         # 1 for true and 0 for pad in mask
-        batch["labels"], batch["label_mask"] = self.custom_pad('true_dist', label_features, -100)
-        batch["word_ids"], _ = self.custom_pad('word_ids', word_ids, -100)
+        batch["labels"], batch["label_mask"], batch["lens"] = self.custom_pad('true_dist', label_features, -100)
+        batch["word_ids"], _, _ = self.custom_pad('word_ids', word_ids, -100)
 
         return batch
 
@@ -297,37 +297,17 @@ class L1DistanceLoss(nn.Module):
     def __init__(self, args):
         super(L1DistanceLoss, self).__init__()
         self.args = args
-        self.word_pair_dims = (1,2)
+        self.loss = nn.L1Loss(reduction='none') 
 
-    def forward(self, predictions, label_batch, length_batch):
-        """ Computes L1 loss on distance matrices.
+    def forward(self, predictions, labels, label_mask, lens):
+        # computes L1 loss on distance matrices.
 
-        Ignores all entries where label_batch=-1
-        Normalizes first within sentences (by dividing by the square of the sentence length)
-        and then across the batch.
+        labels = labels * label_mask
+        loss = self.loss(predictions, labels)
+        summed_loss = torch.sum(loss, dim=(1,2)) # sum for each sequence
+        loss = torch.sum(torch.div(summed_loss, lens.pow(2)))
+        return loss
 
-        Args:
-        predictions: A pytorch batch of predicted distances
-        label_batch: A pytorch batch of true distances
-        length_batch: A pytorch batch of sentence lengths
-
-        Returns:
-        A tuple of:
-            batch_loss: average loss in the batch
-            total_sents: number of sentences in the batch
-        """
-        labels_1s = (label_batch != -1).float()
-        predictions_masked = predictions * labels_1s
-        labels_masked = label_batch * labels_1s
-        total_sents = torch.sum((length_batch != 0)).float()
-        squared_lengths = length_batch.pow(2).float()
-        if total_sents > 0:
-            loss_per_sent = torch.sum(torch.abs(predictions_masked - labels_masked), dim=self.word_pair_dims)
-            normalized_loss_per_sent = loss_per_sent / squared_lengths
-            batch_loss = torch.sum(normalized_loss_per_sent) / total_sents
-        else:
-            batch_loss = torch.tensor(0.0, device=self.args['device'])
-        return batch_loss, total_sents
 
     
 
@@ -461,16 +441,28 @@ if __name__ == '__main__':
 
     batch = next(iter(dataloader))
 
+    inputs = batch['input_ids']
+    attention_mask = batch['attention_mask']
+    labels = batch['labels']  # -100 pad
+    label_mask = batch['label_mask']
+    lens = batch['lens']
+
     outputs = model(
-        input_ids=batch['input_ids'],
-        attention_mask=batch['attention_mask'],
+        input_ids=inputs,
+        attention_mask=attention_mask,
         output_hidden_states=True
     )
 
-    rep = outputs.last_hidden_state
-    pred_dist = probe(rep, batch['word_ids'], batch['label_mask'], batch["label_mask"].shape[-1])
 
-    # compute loss nextr
+    rep = outputs.last_hidden_state
+    pred_dist = probe(rep, batch['word_ids'], label_mask, label_mask.shape[-1])
+
+
+    # compute loss 
+    l1 = L1DistanceLoss(args)
+    loss = l1(pred_dist, labels, label_mask, lens)
+    print(loss)
+
 
 
 
