@@ -512,6 +512,8 @@ if __name__ == '__main__':
     progress_bar = tqdm(range(num_training_steps))
     model.train()
 
+    ### make sure everything on same device ###
+
     for epoch in range(args.num_train_epochs):
 
         ## training ##

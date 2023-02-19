@@ -1,8 +1,14 @@
+vim
+tmux
+
+scipy
 pytorch
 transformers
 datasets
+conllu
 
 mkdir data/raw
 mkdir data/processed
 mkdir data/interim
 mkdir data/processed/UD
+mkdir models
