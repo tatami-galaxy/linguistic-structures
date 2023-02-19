@@ -6,7 +6,7 @@ from transformers import XLMRobertaTokenizerFast, XLMRobertaModel
 from transformers import AdamW
 from transformers import get_scheduler
 from transformers import set_seed
-from datasets import load_dataset, load_from_disk
+from datasets import load_dataset, load_from_disk, DatasetDict, concatenate_datasets
 import argparse
 from argparse import ArgumentParser
 import numpy as np
@@ -184,9 +184,35 @@ class UD:
         return model_inputs
 
 
+    def merge_treebanks(self, dataset_name, config_list):
+
+        dataset = DatasetDict()
+        config = config_list.pop(0) # first config, assume has train, val, test
+
+        dataset['train'] = load_dataset(dataset_name, config, split='train')
+        dataset['validation'] = load_dataset(dataset_name, config, split='validation')
+        dataset['test'] = load_dataset(dataset_name, config, split='test')
+
+        for config in config_list:
+            data = load_dataset(dataset_name, config)
+            keys = data.keys()
+            for key in keys:
+                dataset[key] = concatenate_datasets([dataset[key], data[key]])
+
+        return dataset
+
+
     # process dataset given training task
     def process_data(self, args):
-        dataset = load_dataset(args.dataset_name, args.config)
+
+        if args.all_configs and args.config_list is not None:
+            print('using config {}'.format(args.config_list))
+            ## merge UD treebanks ##
+            dataset = self.merge_treebanks(args.dataset_name, args.config_list)
+
+        else:
+            print('using config {}'.format(args.config))  # assume to have a default value
+            dataset = load_dataset(args.dataset_name, args.config)
 
         # filter examples with None in head
         dataset = dataset.filter(lambda example: all(h.isdigit() for h in example['head']))
@@ -319,6 +345,7 @@ class DepthProbe:
 
 
 
+
 if __name__ == '__main__':
 
     argp = ArgumentParser()
@@ -348,9 +375,16 @@ if __name__ == '__main__':
     # language
     argp.add_argument('--lang', type=str, default='en')
     # treebank config
-    argp.add_argument('--config', type=str, default='en_pud')
+    # in order to use only this need to check what configs are in processed data dir
+    # if its not this, pass in --process_data
+    argp.add_argument('--config', type=str, default='en_pud') # make sure this is not None
     # multiple configs
-    argp.add_argument('--config_list', type=list)
+    argp.add_argument(
+        '--config_list',
+        type=list[str],
+        default=['en_ewt', 'en_gum', 'en_lines', 'en_partut', 'en_pronouns', 'en_pud'])
+    # use all configs
+    argp.add_argument('--all_configs', default=False, action=argparse.BooleanOptionalAction)
     # process data anyway
     argp.add_argument('--process_data', default=False, action=argparse.BooleanOptionalAction)
     # save and overwrite processed data
@@ -386,27 +420,22 @@ if __name__ == '__main__':
         )
     print('task set to {}'.format(args.task))
 
-    # treebank config
-    # add support for merging multiple treebanks here
-    if args.config_list is not None:
-        pass
-    else:
-        print('using config {}'.format(args.config))
-
 
     # tokenizer
     print('loading tokenizer {}'.format(args.model_name))
     tokenizer = XLMRobertaTokenizerFast.from_pretrained(args.model_name)
 
-
     # UD processing class
     ud = UD(args, tokenizer)
 
     # check if proecssed data exists
-    processed_data_dir = args.processed_data_dir+args.config+'_'+args.task
+    processed_data_dir = args.processed_data_dir+args.lang+'_'+args.task
     if not args.process_data and os.path.isdir(processed_data_dir) and len(os.listdir(processed_data_dir)) > 0:
         print('loading processed data from {}'.format(processed_data_dir))
         dataset = load_from_disk(processed_data_dir)
+        with open(args.processed_data_dir+'data_config.txt') as f:
+            data_config = f.readline()
+            print('data config : {}'.format(data_config))
     
     else:
         # get data and process 
@@ -417,21 +446,32 @@ if __name__ == '__main__':
         if args.save_processed_data:
             print('saving processed data')
             dataset.save_to_disk(processed_data_dir)
+            with open(args.processed_data_dir+'data_config.txt', 'w') as f:
+                if args.all_configs and args.config_list is not None:
+                    f.write(', '.join(args.config_list))
+                else:
+                    f.write(args.config) # assume to have default value
             print('saved')
 
-    # dataset -> input_ids, attention_mask, labels, label_mask, word_ids
+    # dataset -> input_ids, attention_mask, word_ids, true_dist
 
 
     print('data collator with padding')
     # data colator -> input_ids, attention_mask, labels, label_mask, word_ids
     data_collator = DataCollatorWithPadding(tokenizer=tokenizer)
 
-    # data loader
-    dataloader = DataLoader(
-        dataset["test"],
+    # data loaders
+    train_dataloader = DataLoader(
+        dataset['train'],
         collate_fn=data_collator,
         batch_size=args.train_batch_size,
     )
+    eval_dataloader = DataLoader(
+        dataset['validation'],
+        collate_fn=data_collator,
+        batch_size=args.eval_batch_size,
+    )
+
 
     # model
     # a base model without any specific head
@@ -450,7 +490,7 @@ if __name__ == '__main__':
     optimizer = AdamW(probe.parameters(), lr=5e-5)
 
     # train steps and scheduler
-    num_training_steps = args.num_train_epochs * len(dataloader)
+    num_training_steps = args.num_train_epochs * len(train_dataloader)
     lr_scheduler = get_scheduler(
         "linear",
         optimizer=optimizer,
@@ -469,8 +509,11 @@ if __name__ == '__main__':
     model.train()
 
     for epoch in range(args.num_train_epochs):
-        loss_val = 0
-        for batch in dataloader:
+
+        ## training ##
+        print('training')
+        train_loss = 0
+        for batch in train_dataloader:
             inputs = batch['input_ids'].to(device)
             attention_mask = batch['attention_mask'].to(device)
             labels = batch['labels'].to(device)  # -100 pad
@@ -489,7 +532,7 @@ if __name__ == '__main__':
 
             # loss
             loss = l1(pred_dist, labels, label_mask, lens)
-            loss_val += loss.item()
+            train_loss += loss.item()
 
             loss.backward()
 
@@ -498,7 +541,34 @@ if __name__ == '__main__':
             optimizer.zero_grad()
             progress_bar.update(1)
 
-        print(loss_val/len(dataloader))
+        print('train loss : {}'.format(train_loss/len(train_dataloader)))
+        print('evaluating')
+
+        ## evaluation ##
+        val_loss = 0
+        for batch in eval_dataloader:
+            with torch.no_grad():
+                inputs = batch['input_ids'].to(device)
+                attention_mask = batch['attention_mask'].to(device)
+                labels = batch['labels'].to(device)  # -100 pad
+                label_mask = batch['label_mask'].to(device)
+                word_ids = batch['word_ids'].to(device)
+                lens = batch['lens'].to(device)
+
+                outputs = model(
+                    input_ids=inputs,
+                    attention_mask=attention_mask,
+                    output_hidden_states=True
+                )
+
+                rep = outputs.last_hidden_state ## change to layer rep
+                pred_dist = probe(rep, word_ids, label_mask, label_mask.shape[-1])
+
+                # loss
+                val_loss += l1(pred_dist, labels, label_mask, lens).item()
+
+        print('val loss : {}'.format(val_loss/eval_dataloader))
+
 
 
 
