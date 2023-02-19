@@ -574,7 +574,7 @@ if __name__ == '__main__':
                 # loss
                 val_loss += l1(pred_dist, labels, label_mask, lens).item()
 
-        print('val loss : {}'.format(val_loss/eval_dataloader))
+        print('val loss : {}'.format(val_loss/len(eval_dataloader)))
 
 
 
