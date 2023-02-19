@@ -306,7 +306,11 @@ class DistanceProbe(nn.Module):
         # pad to max length in batch
         new_hidden_state = self.re_pad(new_hidden_state, max_len) # b, s, d 
 
+        # out on same device
+        device = new_hidden_state.device
+        self.proj.to(device)
 
+        # squared distance computation
         transformed = torch.matmul(new_hidden_state, self.proj) # b,s,r
         batchlen, seqlen, rank = transformed.size()
         transformed = transformed.unsqueeze(2) # b, s, 1, r
