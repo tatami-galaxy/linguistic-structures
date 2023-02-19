@@ -306,10 +306,6 @@ class DistanceProbe(nn.Module):
         # pad to max length in batch
         new_hidden_state = self.re_pad(new_hidden_state, max_len) # b, s, d 
 
-        # out on same device
-        device = new_hidden_state.device
-        self.proj.to(device)
-
         # squared distance computation
         transformed = torch.matmul(new_hidden_state, self.proj) # b,s,r
         batchlen, seqlen, rank = transformed.size()
@@ -510,6 +506,7 @@ if __name__ == '__main__':
     # device
     device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
     model.to(device)
+    probe.to(device)
 
     # train loop
 
