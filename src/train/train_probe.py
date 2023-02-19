@@ -209,6 +209,10 @@ class UD:
             print('using config {}'.format(args.config_list))
             ## merge UD treebanks ##
             dataset = self.merge_treebanks(args.dataset_name, args.config_list)
+            # shuffling
+            dataset['train'] = dataset['train'].shuffle(seed=args.seed)
+            dataset['validation'] = dataset['validation'].shuffle(seed=args.seed)
+            dataset['test'] = dataset['test'].shuffle(seed=args.seed)
 
         else:
             print('using config {}'.format(args.config))  # assume to have a default value
