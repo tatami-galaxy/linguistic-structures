@@ -6,6 +6,7 @@ pytorch
 transformers
 datasets
 conllu
+sentencepiece
 
 mkdir data/raw
 mkdir data/processed
