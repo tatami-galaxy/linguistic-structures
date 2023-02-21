@@ -16,3 +16,4 @@ mkdir data/processed
 mkdir data/interim
 mkdir data/processed/UD
 mkdir models
+mkdir models/probes

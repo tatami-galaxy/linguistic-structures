@@ -1,0 +1,1 @@
+python train_probe.py --num_train_epochs 20 --all_config --process_data --save_processed_data

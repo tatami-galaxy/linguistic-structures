@@ -617,6 +617,8 @@ if __name__ == '__main__':
         print('saving probe')
         torch.save(probe.state_dict(), args.output_dir+'/'+args.task+'_'+str(epoch))
 
+    print('done.')
+
 
 
 
