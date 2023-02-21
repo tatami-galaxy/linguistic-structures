@@ -349,6 +349,25 @@ class DepthProbe:
 
 
 
+# pytorch early stopping
+class EarlyStopper:
+    def __init__(self, patience=1, min_delta=0):
+        self.patience = patience
+        self.min_delta = min_delta
+        self.counter = 0
+        self.min_validation_loss = np.inf
+
+    def early_stop(self, validation_loss):
+        if validation_loss < self.min_validation_loss:
+            self.min_validation_loss = validation_loss
+            self.counter = 0
+        elif validation_loss > (self.min_validation_loss + self.min_delta):
+            self.counter += 1
+            if self.counter >= self.patience:
+                return True
+        return False
+
+
 
 if __name__ == '__main__':
 
@@ -358,7 +377,7 @@ if __name__ == '__main__':
     # model
     argp.add_argument('--model_name', type=str, default='xlm-roberta-base')
     # probe dimension
-    argp.add_argument('--probe_rank', type=int, default=None)
+    argp.add_argument('--probe_rank', type=int, default=None) # 32?
     # max length
     argp.add_argument('--max_length', type=int, default=256)
     # training task
@@ -373,6 +392,8 @@ if __name__ == '__main__':
     argp.add_argument('--eval_batch_size', type=int, default=8)
     # embedding layer to use for projection
     argp.add_argument('--embed_layer', type=int, default=6)
+    # probe save directory
+    argp.add_argument('--output_dir', type=str, default=root+'/models/probes/')
 
 
     ## Data Args ##
@@ -426,6 +447,11 @@ if __name__ == '__main__':
         )
     print('task set to {}'.format(args.task))
 
+    # output directory
+    if args.output_dir is None:
+        raise ValueError(
+            f"pass in output directory"
+        )
 
     # tokenizer
     print('loading tokenizer {}'.format(args.model_name))
@@ -488,6 +514,10 @@ if __name__ == '__main__':
     # need to load model first for this
     probe = DistanceProbe(model.config.hidden_size, args.probe_rank)
 
+    #probe.load_state_dict(torch.load(args.output_dir+'/'+args.task))
+
+
+
     # loss function
     l1 = L1DistanceLoss(args)
 
@@ -515,6 +545,7 @@ if __name__ == '__main__':
     progress_bar = tqdm(range(num_training_steps))
     model.train()
 
+    early_stopper = EarlyStopper()
 
     for epoch in range(args.num_train_epochs):
 
@@ -576,6 +607,17 @@ if __name__ == '__main__':
                 val_loss += l1(pred_dist, labels, label_mask, lens).item()
 
         print('val loss : {}'.format(val_loss/len(eval_dataloader)))
+
+        if early_stopper.early_stop(val_loss):
+            print('early stop at epoch {}'.format(epoch))
+            print('saving final probe')
+            torch.save(probe.state_dict(), args.output_dir+'/'+args.task+'_'+str(epoch))
+            break
+
+        print('saving probe')
+        torch.save(probe.state_dict(), args.output_dir+'/'+args.task+'_'+str(epoch))
+
+
 
 
 
