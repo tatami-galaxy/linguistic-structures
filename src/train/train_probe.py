@@ -365,6 +365,8 @@ if __name__ == '__main__':
     argp.add_argument('--task', type=str, default='node_distance')
     # epochs
     argp.add_argument('--num_train_epochs', type=int, default=3)
+    # learning rate
+    argp.add_argument('--learning_rate', type=float, default=5e-5)
     # train batch size
     argp.add_argument('--train_batch_size', type=int, default=16)
     # eval batch size
@@ -491,7 +493,7 @@ if __name__ == '__main__':
 
     # optimizer
     # training probe only
-    optimizer = AdamW(probe.parameters(), lr=5e-5)
+    optimizer = AdamW(probe.parameters(), lr=args.learning_rate)
 
     # train steps and scheduler
     num_training_steps = args.num_train_epochs * len(train_dataloader)
@@ -513,7 +515,6 @@ if __name__ == '__main__':
     progress_bar = tqdm(range(num_training_steps))
     model.train()
 
-    ### make sure everything on same device ###
 
     for epoch in range(args.num_train_epochs):
 
