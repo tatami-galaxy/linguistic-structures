@@ -13,7 +13,7 @@ class DistanceProbe(nn.Module):
         self.probe_rank = probe_rank
         if probe_rank is None:  # dxd transform by default
             self.probe_rank = self.model_dim
-        self.proj = nn.Parameter(data = torch.zeros(self.model_dim, self.probe_rank))  # projecting transformation # device?
+        self.proj = nn.Parameter(data = torch.zeros(self.model_dim, self.probe_rank))  # projecting transformation 
         nn.init.uniform_(self.proj, -0.05, 0.05)
 
 
@@ -103,6 +103,24 @@ class DistanceProbe(nn.Module):
 class DepthProbe:
     pass
 
+
+
+# L1 loss for distance matrices
+class L1DistanceLoss(nn.Module):
+
+    def __init__(self, args):
+        super(L1DistanceLoss, self).__init__()
+        self.args = args
+        self.loss = nn.L1Loss(reduction='none') 
+
+    def forward(self, predictions, labels, label_mask, lens):
+        # computes L1 loss on distance matrices.
+
+        labels = labels * label_mask
+        loss = self.loss(predictions, labels)
+        summed_loss = torch.sum(loss, dim=(1,2)) # sum for each sequence
+        loss = torch.sum(torch.div(summed_loss, lens.pow(2)))
+        return loss
 
 
 

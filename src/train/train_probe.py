@@ -26,7 +26,7 @@ from torch.utils.data import DataLoader
 from scipy.sparse.csgraph import floyd_warshall
 from dataclasses import dataclass
 from tqdm.auto import tqdm
-from utils import DistanceProbe
+from utils import DistanceProbe, L1DistanceLoss
 
 
 
@@ -230,33 +230,8 @@ class UD:
         # need to map tokenized tokens to UD tokens
         if args.task == 'node_distance':
             # inputs_ids, attention_mask, true_dists
-            dataset = dataset.map(self.distance_map, batched=True, remove_columns=dataset['test'].column_names)
+            dataset = dataset.map(self.distance_map, batched=True) #remove_columns=dataset['test'].column_names)
             return dataset
-
-
-# L1 loss for distance matrices
-class L1DistanceLoss(nn.Module):
-
-    def __init__(self, args):
-        super(L1DistanceLoss, self).__init__()
-        self.args = args
-        self.loss = nn.L1Loss(reduction='none') 
-
-    def forward(self, predictions, labels, label_mask, lens):
-        # computes L1 loss on distance matrices.
-
-        labels = labels * label_mask
-        loss = self.loss(predictions, labels)
-        summed_loss = torch.sum(loss, dim=(1,2)) # sum for each sequence
-        loss = torch.sum(torch.div(summed_loss, lens.pow(2)))
-        return loss
-
-
-    
-
-# depth probe class
-class DepthProbe:
-    pass
 
 
 
@@ -305,6 +280,12 @@ if __name__ == '__main__':
     argp.add_argument('--embed_layer', type=int, default=6)
     # probe save directory
     argp.add_argument('--output_dir', type=str, default=root+'/models/probes/')
+    # overwrite output dir
+    argp.add_argument('--overwrite_output_dir', default=False, action=argparse.BooleanOptionalAction)
+    # train
+    argp.add_argument('--do_train', default=False, action=argparse.BooleanOptionalAction)
+    # eval
+    argp.add_argument('--do_eval', default=False, action=argparse.BooleanOptionalAction)
 
 
     ## Data Args ##
@@ -428,7 +409,6 @@ if __name__ == '__main__':
     #probe.load_state_dict(torch.load(args.output_dir+'/'+args.task))
 
 
-
     # loss function
     l1 = L1DistanceLoss(args)
 
@@ -458,46 +438,16 @@ if __name__ == '__main__':
 
     early_stopper = EarlyStopper()
 
-    for epoch in range(args.num_train_epochs):
-
-        ## training ##
+    if args.do_train: # whether to train or not
         print('training')
-        train_loss = 0
-        for batch in train_dataloader:
-            inputs = batch['input_ids'].to(device)
-            attention_mask = batch['attention_mask'].to(device)
-            labels = batch['labels'].to(device)  # -100 pad
-            label_mask = batch['label_mask'].to(device)
-            word_ids = batch['word_ids'].to(device)
-            lens = batch['lens'].to(device)
+        if not args.overwrite_output_dir:
+            print("--overwrite_output_dir set to False. Won't save trained probe!")
 
-            outputs = model(
-                input_ids=inputs,
-                attention_mask=attention_mask,
-                output_hidden_states=True
-            )
+        for epoch in range(args.num_train_epochs):
 
-            rep = outputs.last_hidden_state ## change to layer rep
-            pred_dist = probe(rep, word_ids, label_mask, label_mask.shape[-1])
-
-            # loss
-            loss = l1(pred_dist, labels, label_mask, lens)
-            train_loss += loss.item()
-
-            loss.backward()
-
-            optimizer.step()
-            lr_scheduler.step()
-            optimizer.zero_grad()
-            progress_bar.update(1)
-
-        print('train loss : {}'.format(train_loss/len(train_dataloader)))
-        print('evaluating')
-
-        ## evaluation ##
-        val_loss = 0
-        for batch in eval_dataloader:
-            with torch.no_grad():
+            ## training ##
+            train_loss = 0
+            for batch in train_dataloader:
                 inputs = batch['input_ids'].to(device)
                 attention_mask = batch['attention_mask'].to(device)
                 labels = batch['labels'].to(device)  # -100 pad
@@ -515,18 +465,62 @@ if __name__ == '__main__':
                 pred_dist = probe(rep, word_ids, label_mask, label_mask.shape[-1])
 
                 # loss
-                val_loss += l1(pred_dist, labels, label_mask, lens).item()
+                loss = l1(pred_dist, labels, label_mask, lens)
+                train_loss += loss.item()
 
-        print('val loss : {}'.format(val_loss/len(eval_dataloader)))
+                loss.backward()
 
-        if early_stopper.early_stop(val_loss):
-            print('early stop at epoch {}'.format(epoch))
-            print('saving final probe')
-            torch.save(probe.state_dict(), args.output_dir+'/'+args.task+'_'+str(epoch))
-            break
+                optimizer.step()
+                lr_scheduler.step()
+                optimizer.zero_grad()
+                progress_bar.update(1)
 
-        print('saving probe')
-        torch.save(probe.state_dict(), args.output_dir+'/'+args.task+'_'+str(epoch))
+            print('train loss : {}'.format(train_loss/len(train_dataloader)))
+            print('calculating eval loss')
+
+            ## evaluation ##
+            val_loss = 0
+            for batch in eval_dataloader:
+                with torch.no_grad():
+                    inputs = batch['input_ids'].to(device)
+                    attention_mask = batch['attention_mask'].to(device)
+                    labels = batch['labels'].to(device)  # -100 pad
+                    label_mask = batch['label_mask'].to(device)
+                    word_ids = batch['word_ids'].to(device)
+                    lens = batch['lens'].to(device)
+
+                    outputs = model(
+                        input_ids=inputs,
+                        attention_mask=attention_mask,
+                        output_hidden_states=True
+                    )
+
+                    rep = outputs.last_hidden_state ## change to layer rep
+                    pred_dist = probe(rep, word_ids, label_mask, label_mask.shape[-1])
+
+                    # loss
+                    val_loss += l1(pred_dist, labels, label_mask, lens).item()
+
+            print('val loss : {}'.format(val_loss/len(eval_dataloader)))
+
+            if early_stopper.early_stop(val_loss):
+                print('early stop at epoch {}'.format(epoch))
+                if args.overwrite_output_dir:
+                    print('saving final probe')
+                    torch.save(probe.state_dict(), args.output_dir+'/'+args.task+'_'+str(epoch))
+                break
+
+            if args.overwrite_output_dir:
+                print('saving probe')
+                torch.save(probe.state_dict(), args.output_dir+'/'+args.task+'_'+str(epoch))
+
+    else:
+        print('did not train')
+
+    if args.do_eval:
+        print("generating distance image")
+        
+
 
     print('done.')
 
