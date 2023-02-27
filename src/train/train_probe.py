@@ -518,8 +518,10 @@ if __name__ == '__main__':
         print('did not train')
 
     if args.do_eval:
-        print("generating distance image")
-        
+        #print("generating distance image")
+        for batch in eval_dataloader:
+            print(batch)
+            quit()
 
 
     print('done.')
