@@ -95,9 +95,12 @@ class DataCollatorWithPadding:
         input_features = [{
             "input_ids": feature["input_ids"],
             "attention_mask": feature["attention_mask"]} for feature in features]
+        
         label_features = [{"true_dist": feature["true_dist"]} for feature in features]
 
         word_ids = [{"word_ids": feature["word_ids"]} for feature in features]
+
+        tokens = [{"tokens": feature["tokens"]} for feature in features]
 
         batch = self.tokenizer.pad(
             input_features,
@@ -114,6 +117,7 @@ class DataCollatorWithPadding:
         # 1 for true and 0 for pad in mask
         batch["labels"], batch["label_mask"], batch["lens"] = self.custom_pad('true_dist', label_features, -100)
         batch["word_ids"], _, _ = self.custom_pad('word_ids', word_ids, -100)
+        batch["sentences"] = tokens
 
         return batch
 
@@ -318,16 +322,14 @@ if __name__ == '__main__':
 
 
 
-    # parse cli arguments
+    # parse and check cli arguments #
     args = argp.parse_args() 
 
     # seed
     set_seed(args.seed)
-
     # dataset and language
     print('dataset : {}'.format(args.dataset_name))
     print('language set to {}'.format(args.lang))
-
     # task
     if args.task is None:
         raise ValueError(
@@ -338,20 +340,19 @@ if __name__ == '__main__':
             f"task not supported yet. Choose from ({tasks})"
         )
     print('task set to {}'.format(args.task))
-
     # output directory
     if args.output_dir is None:
         raise ValueError(
             f"pass in output directory"
         )
 
-    # tokenizer
+    # tokenizer #
     print('loading tokenizer {}'.format(args.model_name))
     tokenizer = XLMRobertaTokenizerFast.from_pretrained(args.model_name)
 
+    # data processing
     # UD processing class
     ud = UD(args, tokenizer)
-
     # check if proecssed data exists
     processed_data_dir = args.processed_data_dir+args.lang+'_'+args.task
     if not args.process_data and os.path.isdir(processed_data_dir) and len(os.listdir(processed_data_dir)) > 0:
@@ -359,13 +360,11 @@ if __name__ == '__main__':
         dataset = load_from_disk(processed_data_dir)
         with open(args.processed_data_dir+'data_config.txt') as f:
             data_config = f.readline()
-            print('data config : {}'.format(data_config))
-    
+            print('data config : {}'.format(data_config)) 
     else:
         # get data and process 
         print('processing data')
         dataset = ud.process_data(args)
-
         # save to disk
         if args.save_processed_data:
             print('saving processed data')
@@ -376,14 +375,12 @@ if __name__ == '__main__':
                 else:
                     f.write(args.config) # assume to have default value
             print('saved')
-
     # dataset -> input_ids, attention_mask, word_ids, true_dist
 
-
+    # data collator, data loader
     print('data collator with padding')
     # data colator -> input_ids, attention_mask, labels, label_mask, word_ids
     data_collator = DataCollatorWithPadding(tokenizer=tokenizer)
-
     # data loaders
     train_dataloader = DataLoader(
         dataset['train'],
@@ -407,7 +404,6 @@ if __name__ == '__main__':
     probe = DistanceProbe(model.config.hidden_size, args.probe_rank)
 
     #probe.load_state_dict(torch.load(args.output_dir+'/'+args.task))
-
 
     # loss function
     l1 = L1DistanceLoss(args)
@@ -520,8 +516,28 @@ if __name__ == '__main__':
     if args.do_eval:
         #print("generating distance image")
         for batch in eval_dataloader:
-            print(batch)
-            quit()
+            with torch.no_grad():
+                inputs = batch['input_ids'].to(device)
+                attention_mask = batch['attention_mask'].to(device)
+                labels = batch['labels'].to(device)  # -100 pad
+                label_mask = batch['label_mask'].to(device)
+                word_ids = batch['word_ids'].to(device)
+                lens = batch['lens'].to(device)
+
+                outputs = model(
+                    input_ids=inputs,
+                    attention_mask=attention_mask,
+                    output_hidden_states=True
+                )
+
+                rep = outputs.last_hidden_state ## change to layer rep
+                pred_dist = probe(rep, word_ids, label_mask, label_mask.shape[-1])
+
+                print(pred_dist.shape)
+                print(labels.shape)
+                sentences = batch["sentences"]
+                print([len(sentence["tokens"]) for sentence in sentences])
+                quit()
 
 
     print('done.')

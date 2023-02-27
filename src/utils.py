@@ -124,6 +124,11 @@ class L1DistanceLoss(nn.Module):
 
 
 
+class Metrics:
+    
+    def spearman():
+        pass
+
 
     
 
