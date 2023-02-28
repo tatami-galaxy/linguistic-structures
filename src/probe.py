@@ -26,7 +26,7 @@ from torch.utils.data import DataLoader
 from scipy.sparse.csgraph import floyd_warshall
 from dataclasses import dataclass
 from tqdm.auto import tqdm
-from utils import DistanceProbe, L1DistanceLoss
+from utils import DistanceProbe, L1DistanceLoss, Metrics
 
 
 
@@ -398,20 +398,25 @@ if __name__ == '__main__':
     # a base model without any specific head
     model = XLMRobertaModel.from_pretrained(args.model_name)
 
+
     # probe
     print('intializing probe for task : {}'.format(args.task))
     # need to load model first for this
     probe = DistanceProbe(model.config.hidden_size, args.probe_rank)
-
     #probe.load_state_dict(torch.load(args.output_dir+'/'+args.task))
+
 
     # loss function
     l1 = L1DistanceLoss(args)
 
-    # optimizer
-    # training probe only
-    optimizer = AdamW(probe.parameters(), lr=args.learning_rate)
 
+    # metric
+    metric = Metrics(args)
+
+
+    # optimizer
+    # training probe only (not model)
+    optimizer = AdamW(probe.parameters(), lr=args.learning_rate)
     # train steps and scheduler
     num_training_steps = args.num_train_epochs * len(train_dataloader)
     lr_scheduler = get_scheduler(
@@ -421,11 +426,11 @@ if __name__ == '__main__':
         num_training_steps=num_training_steps,
     )
     print('train steps : {}'.format(num_training_steps))
-
     # device
     device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
     model.to(device)
     probe.to(device)
+
 
     # train loop
 
@@ -533,11 +538,9 @@ if __name__ == '__main__':
                 rep = outputs.last_hidden_state ## change to layer rep
                 pred_dist = probe(rep, word_ids, label_mask, label_mask.shape[-1])
 
-                print(pred_dist.shape)
-                print(labels.shape)
+                # spearman for each batch
                 sentences = batch["sentences"]
-                print([len(sentence["tokens"]) for sentence in sentences])
-                quit()
+                metric.spearman(pred_dist, labels, label_mask, sentences)
 
 
     print('done.')

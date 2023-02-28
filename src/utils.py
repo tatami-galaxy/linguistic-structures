@@ -1,7 +1,8 @@
 # imports
 import torch.nn as nn
 import torch
-
+import numpy as np
+from scipy import stats
 
 
 # distance probe class
@@ -125,9 +126,25 @@ class L1DistanceLoss(nn.Module):
 
 
 class Metrics:
+
+
+    def __init__(self, args):
+        self.args = args
+        self.dataset_spearman = {}
     
-    def spearman():
-        pass
+    
+    def spearman(self, pred_dist, labels, label_mask, sentences):
+        # pred_dist, labels, label_mask -> b, s, s
+        labels = labels * label_mask
+        sentence_res = []
+        for b in range(pred_dist.shape[0]):
+            for s in range(pred_dist.shape[1]):
+                res = stats.spearmanr(pred_dist[b][s], labels[b][s]) 
+                sentence_res.append(res.statistic)  # scalar for each token
+
+        print(len(sentence_res))
+            
+        quit()
 
 
     
