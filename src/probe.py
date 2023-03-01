@@ -417,8 +417,11 @@ if __name__ == '__main__':
     # optimizer
     # training probe only (not model)
     optimizer = AdamW(probe.parameters(), lr=args.learning_rate)
-    # train steps and scheduler
+    # train steps
     num_training_steps = args.num_train_epochs * len(train_dataloader)
+    # eval steps
+    num_eval_steps = len(eval_dataloader)
+    # scheduler
     lr_scheduler = get_scheduler(
         "linear",
         optimizer=optimizer,
@@ -433,13 +436,11 @@ if __name__ == '__main__':
 
 
     # train loop
-
-    progress_bar = tqdm(range(num_training_steps))
-    model.train()
-
     early_stopper = EarlyStopper()
 
     if args.do_train: # whether to train or not
+        progress_bar = tqdm(range(num_training_steps))
+        model.train()
         print('training')
         if not args.overwrite_output_dir:
             print("--overwrite_output_dir set to False. Won't save trained probe!")
@@ -481,6 +482,7 @@ if __name__ == '__main__':
 
             ## evaluation ##
             val_loss = 0
+            #eval_bar = tqdm(range(num_eval_steps))
             for batch in eval_dataloader:
                 with torch.no_grad():
                     inputs = batch['input_ids'].to(device)
@@ -519,6 +521,10 @@ if __name__ == '__main__':
         print('did not train')
 
     if args.do_eval:
+        
+        print("evaluating")
+        model.eval()
+        eval_bar = tqdm(range(num_eval_steps))
         #print("generating distance image")
         for batch in eval_dataloader:
             with torch.no_grad():
@@ -540,7 +546,11 @@ if __name__ == '__main__':
 
                 # spearman for each batch
                 sentences = batch["sentences"]
-                metric.spearman(pred_dist, labels, label_mask, sentences)
+                metric.add_spearman(pred_dist, labels, label_mask, sentences)
+
+                eval_bar.update(1)
+
+        print(len(metric.dataset_spear))
 
 
     print('done.')

@@ -130,21 +130,36 @@ class Metrics:
 
     def __init__(self, args):
         self.args = args
-        self.dataset_spearman = {}
+        # spearman dict by sentence length
+        # each value list of lists
+        # each list within the outer list are spearman coeffs for a sentence
+        self.dataset_spear = {}
     
     
-    def spearman(self, pred_dist, labels, label_mask, sentences):
+    # compute spearman for each sentence in a batch (returns an array with floats and nan)
+    # append array to spearman dict, keys are sentence lengths (excluding nans)
+    def add_spearman(self, pred_dist, labels, label_mask, sentences):
         # pred_dist, labels, label_mask -> b, s, s
         labels = labels * label_mask
-        sentence_res = []
+        
         for b in range(pred_dist.shape[0]):
+            sentence_spear = [] # spearman for a single sentence
             for s in range(pred_dist.shape[1]):
                 res = stats.spearmanr(pred_dist[b][s], labels[b][s]) 
-                sentence_res.append(res.statistic)  # scalar for each token
+                sentence_spear.append(res.statistic)  # scalar for each token, nan for mask
 
-        print(len(sentence_res))
-            
-        quit()
+            sen_len = len(sentences[b]['tokens'])
+            if sen_len in self.dataset_spear:
+                self.dataset_spear[sen_len].append(sentence_spear)
+            else:
+                self.dataset_spear[sen_len] = sentence_spear
+
+
+    def compute_spearman(self):
+        for key, val in self.dataset_spear.items():
+            # average over each sentence first
+            # here or in add_spearman?
+            pass
 
 
     
