@@ -159,6 +159,11 @@ class Metrics:
                 self.dataset_spear[true_len] = [avg_spear]
 
 
+    def add_uuas(self, pred_dist, labels, label_mask, sentences):
+        pass
+
+
+
     def compute_spearman(self):
 
         avg = []
@@ -169,6 +174,11 @@ class Metrics:
                 avg.append(np.mean(self.dataset_spear[key]))
 
         self.results['spearman'] = np.mean(avg)
+
+
+
+    def compute_uuas(self):
+        pass
 
 
     
