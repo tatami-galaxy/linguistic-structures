@@ -134,32 +134,41 @@ class Metrics:
         # each value list of lists
         # each list within the outer list are spearman coeffs for a sentence
         self.dataset_spear = {}
+        self.results = {}
     
     
     # compute spearman for each sentence in a batch (returns an array with floats and nan)
     # append array to spearman dict, keys are sentence lengths (excluding nans)
     def add_spearman(self, pred_dist, labels, label_mask, sentences):
         # pred_dist, labels, label_mask -> b, s, s
+        # sentences -> [{tokens : [token1, token2, ..]}, {tokens : [token1, token2, ..]}, ...]
         labels = labels * label_mask
-        
         for b in range(pred_dist.shape[0]):
             sentence_spear = [] # spearman for a single sentence
             for s in range(pred_dist.shape[1]):
                 res = stats.spearmanr(pred_dist[b][s], labels[b][s]) 
                 sentence_spear.append(res.statistic)  # scalar for each token, nan for mask
 
-            sen_len = len(sentences[b]['tokens'])
-            if sen_len in self.dataset_spear:
-                self.dataset_spear[sen_len].append(sentence_spear)
+            true_len = len(sentences[b]['tokens']) # true length of the sentence excluding nan (correspondds to padding)
+            true_spear = sentence_spear[:true_len]
+            avg_spear = np.mean(true_spear)
+
+            if true_len in self.dataset_spear:
+                self.dataset_spear[true_len].append(avg_spear)
             else:
-                self.dataset_spear[sen_len] = sentence_spear
+                self.dataset_spear[true_len] = [avg_spear]
 
 
     def compute_spearman(self):
+
+        avg = []
         for key, val in self.dataset_spear.items():
-            # average over each sentence first
-            # here or in add_spearman?
-            pass
+            # key from 5 to 50
+            # average over each sentence length
+            if key >= 5 and key <= 50:
+                avg.append(np.mean(self.dataset_spear[key]))
+
+        self.results['spearman'] = np.mean(avg)
 
 
     

@@ -290,6 +290,12 @@ if __name__ == '__main__':
     argp.add_argument('--do_train', default=False, action=argparse.BooleanOptionalAction)
     # eval
     argp.add_argument('--do_eval', default=False, action=argparse.BooleanOptionalAction)
+    # max train size
+    argp.add_argument('--max_train_samples', type=int, default=None)
+    # max eval size
+    argp.add_argument('--max_eval_samples', type=int, default=None)
+    # max test size
+    argp.add_argument('--max_test_samples', type=int, default=None)
 
 
     ## Data Args ##
@@ -375,7 +381,18 @@ if __name__ == '__main__':
                 else:
                     f.write(args.config) # assume to have default value
             print('saved')
+    
+    if args.max_train_samples is not None:
+        dataset["train"] = dataset["train"].select(range(args.max_train_samples))
+
+    if args.max_eval_samples is not None:
+        dataset["validation"] = dataset["validation"].select(range(args.max_eval_samples))
+
+    if args.max_test_samples is not None:
+        dataset["test"] = dataset["test"].select(range(args.max_test_samples))
+
     # dataset -> input_ids, attention_mask, word_ids, true_dist
+
 
     # data collator, data loader
     print('data collator with padding')
@@ -403,7 +420,12 @@ if __name__ == '__main__':
     print('intializing probe for task : {}'.format(args.task))
     # need to load model first for this
     probe = DistanceProbe(model.config.hidden_size, args.probe_rank)
-    #probe.load_state_dict(torch.load(args.output_dir+'/'+args.task))
+    if not args.do_train:
+        print('--do_train not set. loading pretrained probe')
+        if torch.cuda.is_available():
+            probe.load_state_dict(torch.load(args.output_dir+'/'+'node_distance_10'))
+        else:
+            probe.load_state_dict(torch.load(args.output_dir+'/'+'node_distance_10', map_location=torch.device('cpu')))
 
 
     # loss function
@@ -428,7 +450,7 @@ if __name__ == '__main__':
         num_warmup_steps=0,
         num_training_steps=num_training_steps,
     )
-    print('train steps : {}'.format(num_training_steps))
+
     # device
     device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
     model.to(device)
@@ -439,6 +461,7 @@ if __name__ == '__main__':
     early_stopper = EarlyStopper()
 
     if args.do_train: # whether to train or not
+        print('train steps : {}'.format(num_training_steps))
         progress_bar = tqdm(range(num_training_steps))
         model.train()
         print('training')
@@ -518,10 +541,10 @@ if __name__ == '__main__':
                 torch.save(probe.state_dict(), args.output_dir+'/'+args.task+'_'+str(epoch))
 
     else:
-        print('did not train')
+        print('did not train. set --do_train to train')
 
     if args.do_eval:
-        
+        print('eval steps : {}'.format(num_eval_steps))
         print("evaluating")
         model.eval()
         eval_bar = tqdm(range(num_eval_steps))
@@ -550,7 +573,12 @@ if __name__ == '__main__':
 
                 eval_bar.update(1)
 
-        print(len(metric.dataset_spear))
+        metric.compute_spearman()
+        print(metric.results['spearman'])
+
+    else:
+        print('did not eval. set --do_eval to train')
+
 
 
     print('done.')

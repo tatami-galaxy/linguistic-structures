@@ -1,1 +1,1 @@
-python train_probe.py --num_train_epochs 20 --all_config --process_data --save_processed_data --overwrite_output_dir --do_train
+python train_probe.py --num_train_epochs 20 --all_config --process_data --save_processed_data --overwrite_output_dir --do_train --do_eval
