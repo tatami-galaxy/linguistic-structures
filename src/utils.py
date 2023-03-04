@@ -3,6 +3,8 @@ import torch.nn as nn
 import torch
 import numpy as np
 from scipy import stats
+from scipy.sparse.csgraph import minimum_spanning_tree as mst
+from scipy.sparse import csr_matrix
 
 
 # distance probe class
@@ -143,9 +145,9 @@ class Metrics:
         # pred_dist, labels, label_mask -> b, s, s
         # sentences -> [{tokens : [token1, token2, ..]}, {tokens : [token1, token2, ..]}, ...]
         labels = labels * label_mask
-        for b in range(pred_dist.shape[0]):
+        for b in range(pred_dist.shape[0]): # each example in batch
             sentence_spear = [] # spearman for a single sentence
-            for s in range(pred_dist.shape[1]):
+            for s in range(pred_dist.shape[1]): # each tokekn in example
                 res = stats.spearmanr(pred_dist[b][s], labels[b][s]) 
                 sentence_spear.append(res.statistic)  # scalar for each token, nan for mask
 
@@ -160,7 +162,17 @@ class Metrics:
 
 
     def add_uuas(self, pred_dist, labels, label_mask, sentences):
-        pass
+        # pred_dist, labels, label_mask -> b, s, s
+        # sentences -> [{tokens : [token1, token2, ..]}, {tokens : [token1, token2, ..]}, ...]
+        # pred_dist, labels are distance matrices
+        # need adjanceny matrices to compute spanning tree
+        # for labels, distance = 1 -> edge
+        labels = labels * label_mask
+        #print(pred_dist[0])
+        #print(labels[0])
+        #quit()
+
+
 
 
 

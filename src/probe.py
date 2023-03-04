@@ -132,6 +132,7 @@ class UD:
 
     # dataset mapping functions
     # get pairwise distances for sentences
+    # dist_matrix specifies distance between nodes, not edges
     def tree_distances(self, heads):
         # compute adj matrix from heads
         # floyd warshall
@@ -275,7 +276,7 @@ if __name__ == '__main__':
     # epochs
     argp.add_argument('--num_train_epochs', type=int, default=3)
     # learning rate
-    argp.add_argument('--learning_rate', type=float, default=5e-5)
+    argp.add_argument('--learning_rate', type=float, default=1e-3)  # 5e-5
     # train batch size
     argp.add_argument('--train_batch_size', type=int, default=16)
     # eval batch size
@@ -296,6 +297,8 @@ if __name__ == '__main__':
     argp.add_argument('--max_eval_samples', type=int, default=None)
     # max test size
     argp.add_argument('--max_test_samples', type=int, default=None)
+    # pretrained probe
+    argp.add_argument('--load_pretrained', default=False, action=argparse.BooleanOptionalAction)
 
 
     ## Data Args ##
@@ -420,8 +423,8 @@ if __name__ == '__main__':
     print('intializing probe for task : {}'.format(args.task))
     # need to load model first for this
     probe = DistanceProbe(model.config.hidden_size, args.probe_rank)
-    if not args.do_train:
-        print('--do_train not set. loading pretrained probe')
+    if args.load_pretrained:
+        print('loading pretrained probe')
         if torch.cuda.is_available():
             probe.load_state_dict(torch.load(args.output_dir+'/'+'node_distance_10'))
         else:
@@ -458,7 +461,7 @@ if __name__ == '__main__':
 
 
     # train loop
-    early_stopper = EarlyStopper()
+    early_stopper = EarlyStopper(patience=3, min_delta=0.5)
 
     if args.do_train: # whether to train or not
         print('train steps : {}'.format(num_training_steps))
@@ -571,6 +574,10 @@ if __name__ == '__main__':
                 sentences = batch["sentences"]
                 metric.add_spearman(pred_dist, labels, label_mask, sentences)
 
+                # uuas
+                metric.add_uuas(pred_dist, labels, label_mask, sentences)
+
+
                 eval_bar.update(1)
 
         metric.compute_spearman()
@@ -578,7 +585,6 @@ if __name__ == '__main__':
 
     else:
         print('did not eval. set --do_eval to train')
-
 
 
     print('done.')
