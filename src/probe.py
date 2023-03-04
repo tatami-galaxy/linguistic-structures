@@ -526,7 +526,9 @@ if __name__ == '__main__':
                         output_hidden_states=True
                     )
 
-                    rep = outputs.last_hidden_state ## change to layer rep
+                    #rep = outputs.last_hidden_state ## change to layer rep
+                    rep = outputs.hidden_states[args.embed_layer + 1] # 0 : embedding layer
+                    
                     pred_dist = probe(rep, word_ids, label_mask, label_mask.shape[-1])
 
                     # loss
