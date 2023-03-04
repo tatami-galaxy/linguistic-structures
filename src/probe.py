@@ -268,7 +268,7 @@ if __name__ == '__main__':
     # model
     argp.add_argument('--model_name', type=str, default='xlm-roberta-base')
     # probe dimension
-    argp.add_argument('--probe_rank', type=int, default=None) # 32?
+    argp.add_argument('--probe_rank', type=int, default=None) # 32 or lower than dim
     # max length
     argp.add_argument('--max_length', type=int, default=256)
     # training task
@@ -276,7 +276,7 @@ if __name__ == '__main__':
     # epochs
     argp.add_argument('--num_train_epochs', type=int, default=3)
     # learning rate
-    argp.add_argument('--learning_rate', type=float, default=1e-3)  # 5e-5
+    argp.add_argument('--learning_rate', type=float, default=3e-4)  # 5e-5
     # train batch size
     argp.add_argument('--train_batch_size', type=int, default=16)
     # eval batch size
