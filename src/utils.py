@@ -168,9 +168,9 @@ class Metrics:
         # need adjanceny matrices to compute spanning tree
         # for labels, distance = 1 -> edge
         labels = labels * label_mask
-        #print(pred_dist[0])
-        #print(labels[0])
-        #quit()
+        print(pred_dist[0])
+        print(labels[0])
+        quit()
 
 
 

@@ -299,6 +299,8 @@ if __name__ == '__main__':
     argp.add_argument('--max_test_samples', type=int, default=None)
     # pretrained probe
     argp.add_argument('--load_pretrained', default=False, action=argparse.BooleanOptionalAction)
+    # pretrained_probe location
+    argp.add_argument('--pretrained_probe_dir', type=str, default=None)
 
 
     ## Data Args ##
@@ -424,11 +426,16 @@ if __name__ == '__main__':
     # need to load model first for this
     probe = DistanceProbe(model.config.hidden_size, args.probe_rank)
     if args.load_pretrained:
+        if args.pretrained_probe_dir is None:
+            raise ValueError(
+            f"pass in pretrained probe directory (--pretrained_probe_dir)"
+        )
         print('loading pretrained probe')
         if torch.cuda.is_available():
-            probe.load_state_dict(torch.load(args.output_dir+'/'+'node_distance_10'))
+            probe.load_state_dict(torch.load(args.output_dir+'/'+'node_distance_59')) ### dont hardcode
         else:
-            probe.load_state_dict(torch.load(args.output_dir+'/'+'node_distance_10', map_location=torch.device('cpu')))
+            ### dont hardcode
+            probe.load_state_dict(torch.load(args.output_dir+'/'+'node_distance_59', map_location=torch.device('cpu')))
 
 
     # loss function
@@ -461,7 +468,7 @@ if __name__ == '__main__':
 
 
     # train loop
-    early_stopper = EarlyStopper(patience=3, min_delta=0.5)
+    early_stopper = EarlyStopper(patience=1, min_delta=0)
 
     if args.do_train: # whether to train or not
         print('train steps : {}'.format(num_training_steps))
@@ -540,12 +547,14 @@ if __name__ == '__main__':
                 print('early stop at epoch {}'.format(epoch))
                 if args.overwrite_output_dir:
                     print('saving final probe')
-                    torch.save(probe.state_dict(), args.output_dir+'/'+args.task+'_'+str(epoch))
+                    checkpoint_str = args.output_dir+'/'+args.task+'_layer_'+args.embed_layer+'_'+str(epoch)
+                    torch.save(probe.state_dict(), checkpoint_str)
                 break
 
             if args.overwrite_output_dir:
                 print('saving probe')
-                torch.save(probe.state_dict(), args.output_dir+'/'+args.task+'_'+str(epoch))
+                checkpoint_str = args.output_dir+'/'+args.task+'_layer_'+args.embed_layer+'_'+str(epoch)
+                torch.save(probe.state_dict(), checkpoint_str)
 
     else:
         print('did not train. set --do_train to train')
