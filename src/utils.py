@@ -132,10 +132,13 @@ class Metrics:
 
     def __init__(self, args):
         self.args = args
+        self.min_length = args.min_length
+        self.max_length = 50
         # spearman dict by sentence length
         # each value list of lists
         # each list within the outer list are spearman coeffs for a sentence
         self.dataset_spear = {}
+        self.dataset_uuas = []
         self.results = {}
     
     
@@ -161,6 +164,8 @@ class Metrics:
                 self.dataset_spear[true_len] = [avg_spear]
 
 
+    # reconstruct parse tree from distance between nodes
+    # minimum spanning tree with distance matrix
     def add_uuas(self, pred_dist, labels, label_mask, sentences):
         # pred_dist, labels, label_mask -> b, s, s
         # sentences -> [{tokens : [token1, token2, ..]}, {tokens : [token1, token2, ..]}, ...]
@@ -168,11 +173,27 @@ class Metrics:
         # need adjanceny matrices to compute spanning tree
         # for labels, distance = 1 -> edge
         labels = labels * label_mask
-        print(pred_dist[0])
-        print(labels[0])
-        quit()
-
-
+        for b in range(pred_dist.shape[0]): # each example in batch
+            true_len = len(sentences[b]['tokens']) # true length of the sentence excluding nan (correspondds to padding)
+            if true_len < self.min_length or true_len > self.max_length:
+                continue
+            # remove padding
+            pred_mat = csr_matrix(pred_dist[b][:true_len, :true_len])
+            true_mat = csr_matrix(labels[b][:true_len, :true_len])
+            # mst
+            true_mst = mst(true_mat).toarray().astype(int)
+            pred_mst = np.rint(mst(pred_mat).toarray()).astype(int)
+            # edges
+            # indices where there is a true edge
+            # 1 -> edge
+            indices = np.transpose((true_mst==1).nonzero())
+            num_true_edges = len(indices)
+            pred_edge_count = 0
+            for e in range(num_true_edges):
+                if pred_mst[indices[e][0], indices[e][1]] == 1:
+                    pred_edge_count += 1
+            uuas = pred_edge_count / num_true_edges
+            self.dataset_uuas.append(uuas)
 
 
 
@@ -180,9 +201,9 @@ class Metrics:
 
         avg = []
         for key, val in self.dataset_spear.items():
-            # key from 5 to 50
+            # key from min to max (check init)
             # average over each sentence length
-            if key >= 5 and key <= 50:
+            if key >= self.min_length and key <= self.max_length:
                 avg.append(np.mean(self.dataset_spear[key]))
 
         self.results['spearman'] = np.mean(avg)
@@ -190,7 +211,7 @@ class Metrics:
 
 
     def compute_uuas(self):
-        pass
+        self.results['uuas'] = np.mean(self.dataset_uuas)
 
 
     

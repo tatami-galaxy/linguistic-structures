@@ -231,6 +231,9 @@ class UD:
         # filter examples with None in head
         dataset = dataset.filter(lambda example: all(h.isdigit() for h in example['head']))
 
+        # filter very small sentences #
+        dataset = dataset.filter(lambda example: len(example['head']) >= args.min_length)
+
         # number of tokens in UD <= number of tokens in tokenized text
         # need to map tokenized tokens to UD tokens
         if args.task == 'node_distance':
@@ -274,6 +277,8 @@ if __name__ == '__main__':
     # training task
     argp.add_argument('--task', type=str, default='node_distance')
     # epochs
+    # how long to train?
+    # what's the stopping crieteria?
     argp.add_argument('--num_train_epochs', type=int, default=3)
     # learning rate
     argp.add_argument('--learning_rate', type=float, default=3e-4)  # 5e-5
@@ -300,7 +305,7 @@ if __name__ == '__main__':
     # pretrained probe
     argp.add_argument('--load_pretrained', default=False, action=argparse.BooleanOptionalAction)
     # pretrained_probe location
-    argp.add_argument('--pretrained_probe_dir', type=str, default=None)
+    argp.add_argument('--pretrained_probe', type=str, default=None)
 
 
     ## Data Args ##
@@ -319,6 +324,11 @@ if __name__ == '__main__':
         default=['en_ewt', 'en_gum', 'en_lines', 'en_partut', 'en_pronouns', 'en_pud'])
     # use all configs
     argp.add_argument('--all_configs', default=False, action=argparse.BooleanOptionalAction)
+    # minimum sentence length
+    argp.add_argument('--min_length', type=int, default=4)
+    # maximum sentence length
+    # do we need this?
+    #argp.add_argument('--max_length', type=int, default=50)
     # process data anyway
     argp.add_argument('--process_data', default=False, action=argparse.BooleanOptionalAction)
     # save and overwrite processed data
@@ -426,16 +436,15 @@ if __name__ == '__main__':
     # need to load model first for this
     probe = DistanceProbe(model.config.hidden_size, args.probe_rank)
     if args.load_pretrained:
-        if args.pretrained_probe_dir is None:
+        if args.pretrained_probe is None:
             raise ValueError(
-            f"pass in pretrained probe directory (--pretrained_probe_dir)"
+            f"pass in pretrained probe (--pretrained_probe)"
         )
         print('loading pretrained probe')
         if torch.cuda.is_available():
-            probe.load_state_dict(torch.load(args.output_dir+'/'+'node_distance_59')) ### dont hardcode
+            probe.load_state_dict(torch.load(args.pretrained_probe)) 
         else:
-            ### dont hardcode
-            probe.load_state_dict(torch.load(args.output_dir+'/'+'node_distance_59', map_location=torch.device('cpu')))
+            probe.load_state_dict(torch.load(args.pretrained_probe, map_location=torch.device('cpu')))
 
 
     # loss function
@@ -547,13 +556,13 @@ if __name__ == '__main__':
                 print('early stop at epoch {}'.format(epoch))
                 if args.overwrite_output_dir:
                     print('saving final probe')
-                    checkpoint_str = args.output_dir+'/'+args.task+'_layer_'+args.embed_layer+'_'+str(epoch)
+                    checkpoint_str = args.output_dir+'/'+args.task+'_layer_'+str(args.embed_layer)+'_'+str(epoch)
                     torch.save(probe.state_dict(), checkpoint_str)
                 break
 
             if args.overwrite_output_dir:
                 print('saving probe')
-                checkpoint_str = args.output_dir+'/'+args.task+'_layer_'+args.embed_layer+'_'+str(epoch)
+                checkpoint_str = args.output_dir+'/'+args.task+'_layer_'+str(args.embed_layer)+'_'+str(epoch)
                 torch.save(probe.state_dict(), checkpoint_str)
 
     else:
@@ -595,7 +604,10 @@ if __name__ == '__main__':
                 eval_bar.update(1)
 
         metric.compute_spearman()
-        print(metric.results['spearman'])
+        metric.compute_uuas()
+        
+        for key, val in metric.results.items():
+            print('{} : {}'.format(key, val))
 
     else:
         print('did not eval. set --do_eval to train')
