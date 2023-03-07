@@ -151,7 +151,7 @@ class Metrics:
         for b in range(pred_dist.shape[0]): # each example in batch
             sentence_spear = [] # spearman for a single sentence
             for s in range(pred_dist.shape[1]): # each tokekn in example
-                res = stats.spearmanr(pred_dist[b][s], labels[b][s]) 
+                res = stats.spearmanr(pred_dist[b][s].cpu(), labels[b][s].cpu()) 
                 sentence_spear.append(res.statistic)  # scalar for each token, nan for mask
 
             true_len = len(sentences[b]['tokens']) # true length of the sentence excluding nan (correspondds to padding)
