@@ -279,7 +279,7 @@ if __name__ == '__main__':
     # epochs
     # how long to train?
     # what's the stopping crieteria?
-    argp.add_argument('--num_train_epochs', type=int, default=3)
+    argp.add_argument('--num_train_epochs', type=int, default=100)
     # learning rate
     argp.add_argument('--learning_rate', type=float, default=3e-4)  # 5e-5
     # train batch size
@@ -306,6 +306,12 @@ if __name__ == '__main__':
     argp.add_argument('--load_pretrained', default=False, action=argparse.BooleanOptionalAction)
     # pretrained_probe location
     argp.add_argument('--pretrained_probe', type=str, default=None)
+    # early stop
+    argp.add_argument('--early_stop', default=False, action=argparse.BooleanOptionalAction)
+    # early stop patience
+    argp.add_argument('--patience', type=int, default=3)
+    # early stop min delta
+    argp.add_argument('--min_delta', type=float, default=0.5)
 
 
     ## Data Args ##
@@ -477,7 +483,8 @@ if __name__ == '__main__':
 
 
     # train loop
-    early_stopper = EarlyStopper(patience=1, min_delta=0)
+    if args.early_stop:
+        early_stopper = EarlyStopper(patience=args.patience, min_delta=args.min_delta)
 
     if args.do_train: # whether to train or not
         print('train steps : {}'.format(num_training_steps))
@@ -621,8 +628,11 @@ if __name__ == '__main__':
 
 
 # train for longer
-# higher lr
-# eval
+# all layers
+# other models
+# compare with random
+# multilingual expts
+# other structures?
 
 
 
