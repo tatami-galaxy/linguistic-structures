@@ -178,8 +178,8 @@ class Metrics:
             if true_len < self.min_length or true_len > self.max_length:
                 continue
             # remove padding
-            pred_mat = csr_matrix(pred_dist[b][:true_len, :true_len])
-            true_mat = csr_matrix(labels[b][:true_len, :true_len])
+            pred_mat = csr_matrix(pred_dist[b][:true_len, :true_len].cpu())
+            true_mat = csr_matrix(labels[b][:true_len, :true_len].cpu())
             # mst
             true_mst = mst(true_mat).toarray().astype(int)
             pred_mst = np.rint(mst(pred_mat).toarray()).astype(int)

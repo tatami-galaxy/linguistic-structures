@@ -309,7 +309,7 @@ if __name__ == '__main__':
     # early stop
     argp.add_argument('--early_stop', default=False, action=argparse.BooleanOptionalAction)
     # early stop patience
-    argp.add_argument('--patience', type=int, default=3)
+    argp.add_argument('--patience', type=int, default=7)
     # early stop min delta
     argp.add_argument('--min_delta', type=float, default=0.5)
 
