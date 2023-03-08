@@ -357,6 +357,8 @@ if __name__ == '__main__':
     # dataset and language
     print('dataset : {}'.format(args.dataset_name))
     print('language set to {}'.format(args.lang))
+    # layer
+    print('layer set to {}'.format(args.embed_layer))
     # task
     if args.task is None:
         raise ValueError(
