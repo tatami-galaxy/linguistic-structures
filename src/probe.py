@@ -631,6 +631,7 @@ if __name__ == '__main__':
 
 # train for longer
 # all layers
+# change rank (32?)
 # other models
 # compare with random
 # multilingual expts
