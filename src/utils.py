@@ -14,7 +14,7 @@ class DistanceProbe(nn.Module):
         super(DistanceProbe, self).__init__()
         self.model_dim = model_dim
         self.probe_rank = probe_rank
-        if probe_rank is None:  # dxd transform by default
+        if self.probe_rank is None:  # dxd transform by default
             self.probe_rank = self.model_dim
         self.proj = nn.Parameter(data = torch.zeros(self.model_dim, self.probe_rank))  # projecting transformation 
         nn.init.uniform_(self.proj, -0.05, 0.05)

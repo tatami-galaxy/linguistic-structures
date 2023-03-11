@@ -271,7 +271,7 @@ if __name__ == '__main__':
     # model
     argp.add_argument('--model_name', type=str, default='xlm-roberta-base')
     # probe dimension
-    argp.add_argument('--probe_rank', type=int, default=None) # 32 or lower than dim
+    argp.add_argument('--probe_rank', type=int, default=None) # 128 or lower than dim
     # max length
     argp.add_argument('--max_length', type=int, default=256)
     # training task
@@ -626,9 +626,7 @@ if __name__ == '__main__':
 
 
 
-
-
-
+# add wandb support
 # train for longer
 # all layers
 # change rank (32?)
