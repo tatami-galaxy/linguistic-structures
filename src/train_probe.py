@@ -628,12 +628,24 @@ if __name__ == '__main__':
 
 # add wandb support
 # train for longer
-# all layers
-# change rank (32?)
-# other models
 # compare with random
+
+
+# finetuning expts
+#   similar results after finetuning? (adapter?)
+#   probe trained on pre-trained model works on fine-tuned model?
+#   probe performance correlates with task performance?
+#   if not what can we do?    
+#   relative embeddings?
+
+
 # multilingual expts
-# other structures?
+#   lang adapter + task adapter?
+#   where to probe?
+#   other models -> xmod?
+
+# other structures
+#   conditional probing
 
 
 
