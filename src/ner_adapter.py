@@ -1,17 +1,11 @@
 from transformers import AutoTokenizer, AutoConfig, XLMRobertaAdapterModel, set_seed
 from datasets import load_dataset
-from torch.utils.data import Dataset
 import torch
-import torch.nn.functional as F
-from tqdm.notebook import tqdm
-from torch import nn
-import copy
+from tqdm.auto import tqdm
 from transformers import AdapterConfig
 from datasets import load_dataset, load_from_disk
-from transformers import TrainingArguments
 from transformers import DataCollatorForTokenClassification
-from transformers import TrainingArguments, AdapterTrainer, EvalPrediction
-from datasets import load_metric
+from evaluate import load
 import numpy as np
 from transformers.adapters.composition import Stack
 from torch.utils.data import DataLoader
@@ -19,7 +13,6 @@ from torch.optim import AdamW
 from transformers import get_scheduler
 from tqdm.auto import tqdm
 import os
-import sys
 from os.path import dirname, abspath
 import argparse
 from argparse import ArgumentParser
@@ -126,14 +119,14 @@ if __name__ == '__main__':
     argp.add_argument('--train_batch_size', type=int, default=16)
     # eval batch size
     argp.add_argument('--eval_batch_size', type=int, default=8)
-    # probe save directory
-    #argp.add_argument('--output_dir', type=str, default=root+'/models/probes/')
+    # model save directory
+    argp.add_argument('--output_dir', type=str, default=root+'/models/finetuned/')
     # overwrite output dir
-    #argp.add_argument('--overwrite_output_dir', default=False, action=argparse.BooleanOptionalAction)
+    argp.add_argument('--overwrite_output_dir', default=False, action=argparse.BooleanOptionalAction)
     # train
     argp.add_argument('--do_train', default=False, action=argparse.BooleanOptionalAction)
     # eval
-    argp.add_argument('--do_eval', default=False, action=argparse.BooleanOptionalAction)
+    #argp.add_argument('--do_eval', default=False, action=argparse.BooleanOptionalAction)
     # max train size
     argp.add_argument('--max_train_samples', type=int, default=None)
     # max eval size
@@ -236,7 +229,7 @@ if __name__ == '__main__':
     )
 
     # metric
-    metric = load_metric("seqeval")
+    metric = load("seqeval")
 
     # optimizer
     # training probe only (not model)
@@ -267,14 +260,17 @@ if __name__ == '__main__':
         model.train()
         print('training')
         if not args.overwrite_output_dir:
-            print("--overwrite_output_dir set to False. Won't save trained probe!")
-
+            print("--overwrite_output_dir set to False. Won't save trained model!")
+        
         for epoch in range(args.num_train_epochs):
+            train_loss = 0
+            # training
             for batch in train_dataloader:
                 inputs = batch['input_ids'].to(device)
                 labels = batch['labels'].to(device)
                 outputs = model(input_ids=inputs, labels=labels)
                 loss = outputs.loss
+                train_loss += loss.item()
                 loss.backward()
 
                 optimizer.step()
@@ -283,6 +279,45 @@ if __name__ == '__main__':
                 progress_bar.update(1)
 
             print('train loss : {}'.format(train_loss/len(train_dataloader)))
-            print('calculating eval loss')
+            print('evaluating')
+            # evaluating
+            model.eval()
+            val_loss = 0
+            for batch in eval_dataloader:
+                with torch.no_grad():
+                    inputs = batch['input_ids'].to(device)
+                    labels = batch['labels'].to(device)
+                    outputs = model(input_ids=inputs, labels=labels)
+                    val_loss += outputs.loss.item()
+
+                predictions = outputs.logits.argmax(dim=2)
+                labels = batch["labels"]
+
+            print('val loss at epoch {} : {}'.format(epoch, val_loss/len(eval_dataloader)))
+
+            results = metric.compute()
+            print(
+                f"epoch {epoch}:",
+                {
+                    key: results[f"overall_{key}"]
+                    for key in ["precision", "recall", "f1", "accuracy"]
+                },
+            )
+
+            if early_stopper.early_stop(val_loss):
+                print('early stop at epoch {}'.format(epoch))
+                if args.overwrite_output_dir:
+                    print('saving final model')
+                    checkpoint_str = args.output_dir+'/'+args.dataset_name+'_'+str(epoch)
+                    model.save_pretrained(checkpoint_str)
+                break
+
+            if args.overwrite_output_dir:
+                print('saving model')
+                checkpoint_str = args.output_dir+'/'+args.dataset_name+'_'+str(epoch)
+                model.save_pretrained(checkpoint_str)
+
+    else:
+        print('did not train')
 
 

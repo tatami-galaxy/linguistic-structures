@@ -633,6 +633,8 @@ if __name__ == '__main__':
 
 # finetuning expts
 #   similar results after finetuning? (adapter?)
+#   probe on pretrained model with lang adapter?
+#   where to probe?
 #   probe trained on pre-trained model works on fine-tuned model?
 #   probe performance correlates with task performance?
 #   if not what can we do?    
