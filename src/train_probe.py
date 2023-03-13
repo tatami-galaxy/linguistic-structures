@@ -491,12 +491,13 @@ if __name__ == '__main__':
     if args.do_train: # whether to train or not
         print('train steps : {}'.format(num_training_steps))
         progress_bar = tqdm(range(num_training_steps))
-        model.train()
         print('training')
         if not args.overwrite_output_dir:
             print("--overwrite_output_dir set to False. Won't save trained probe!")
 
         for epoch in range(args.num_train_epochs):
+
+            probe.train()
 
             ## training ##
             train_loss = 0
@@ -536,6 +537,7 @@ if __name__ == '__main__':
             ## evaluation ##
             val_loss = 0
             #eval_bar = tqdm(range(num_eval_steps))
+            probe.eval()
             for batch in eval_dataloader:
                 with torch.no_grad():
                     inputs = batch['input_ids'].to(device)

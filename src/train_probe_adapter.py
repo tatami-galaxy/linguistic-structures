@@ -529,13 +529,12 @@ if __name__ == '__main__':
     if args.do_train: # whether to train or not
         print('train steps : {}'.format(num_training_steps))
         progress_bar = tqdm(range(num_training_steps))
-        model.train()
         print('training')
         if not args.overwrite_output_dir:
             print("--overwrite_output_dir set to False. Won't save trained probe!")
 
         for epoch in range(args.num_train_epochs):
-
+            probe.train()
             ## training ##
             train_loss = 0
             for batch in train_dataloader:
@@ -553,6 +552,7 @@ if __name__ == '__main__':
                 )
 
                 #rep = outputs.last_hidden_state ## change to layer rep
+                # probe task adapter instead #
                 rep = outputs.hidden_states[args.embed_layer + 1] # 0 : embedding layer
 
                 pred_dist = probe(rep, word_ids, label_mask, label_mask.shape[-1])
@@ -573,6 +573,7 @@ if __name__ == '__main__':
 
             ## evaluation ##
             val_loss = 0
+            probe.eval()
             #eval_bar = tqdm(range(num_eval_steps))
             for batch in eval_dataloader:
                 with torch.no_grad():
@@ -590,6 +591,7 @@ if __name__ == '__main__':
                     )
 
                     #rep = outputs.last_hidden_state ## change to layer rep
+                    # probe task adapter instead #
                     rep = outputs.hidden_states[args.embed_layer + 1] # 0 : embedding layer
                     
                     pred_dist = probe(rep, word_ids, label_mask, label_mask.shape[-1])
@@ -618,7 +620,7 @@ if __name__ == '__main__':
     if args.do_eval:
         print('eval steps : {}'.format(num_eval_steps))
         print("evaluating")
-        model.eval()
+        probe.eval()
         eval_bar = tqdm(range(num_eval_steps))
         #print("generating distance image")
         for batch in eval_dataloader:
