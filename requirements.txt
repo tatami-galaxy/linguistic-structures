@@ -6,10 +6,12 @@ git config --global user.name "Your Name"
 
 scipy
 # pytorch
-transformers
+adapter-transformers
 datasets
+evaluate
 conllu
 sentencepiece
+seqeval
 
 mkdir data/raw
 mkdir data/processed

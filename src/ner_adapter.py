@@ -293,6 +293,9 @@ if __name__ == '__main__':
                 predictions = outputs.logits.argmax(dim=2)
                 labels = batch["labels"]
 
+                true_predictions, true_labels = postprocess(predictions, labels)
+                metric.add_batch(predictions=true_predictions, references=true_labels)
+
             print('val loss at epoch {} : {}'.format(epoch, val_loss/len(eval_dataloader)))
 
             results = metric.compute()
