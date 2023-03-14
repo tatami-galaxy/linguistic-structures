@@ -1,11 +1,10 @@
-vim
-tmux
+#vim
+#tmux
 
-git config --global user.email "you@example.com"
-git config --global user.name "Your Name"
+#git config --global user.email "you@example.com"
+#git config --global user.name "Your Name"
 
 scipy
-# pytorch
 adapter-transformers
 datasets
 evaluate
@@ -13,11 +12,3 @@ conllu
 sentencepiece
 seqeval
 
-mkdir data/raw
-mkdir data/processed
-mkdir data/interim
-mkdir data/processed/UD
-mkdir data/processed/wikiann
-mkdir models
-mkdir models/probes
-mkdir models/finetuned
