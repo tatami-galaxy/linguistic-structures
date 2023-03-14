@@ -458,10 +458,8 @@ if __name__ == '__main__':
     # loss function
     l1 = L1DistanceLoss(args)
 
-
     # metric
     metric = Metrics(args)
-
 
     # optimizer
     # training probe only (not model)

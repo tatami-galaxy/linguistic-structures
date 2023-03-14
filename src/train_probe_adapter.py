@@ -551,8 +551,8 @@ if __name__ == '__main__':
                     output_hidden_states=True
                 )
 
-                #rep = outputs.last_hidden_state ## change to layer rep
-                # probe task adapter instead #
+                #rep = outputs.last_hidden_state 
+                # rep is after passing through task adapter of the layer
                 rep = outputs.hidden_states[args.embed_layer + 1] # 0 : embedding layer
 
                 pred_dist = probe(rep, word_ids, label_mask, label_mask.shape[-1])
@@ -590,8 +590,8 @@ if __name__ == '__main__':
                         output_hidden_states=True
                     )
 
-                    #rep = outputs.last_hidden_state ## change to layer rep
-                    # probe task adapter instead #
+                    #rep = outputs.last_hidden_state 
+                    # rep is after passing through task adapter of the layer
                     rep = outputs.hidden_states[args.embed_layer + 1] # 0 : embedding layer
                     
                     pred_dist = probe(rep, word_ids, label_mask, label_mask.shape[-1])
@@ -665,24 +665,6 @@ if __name__ == '__main__':
     print('done.')
 
 
-
-# add wandb support
-# train for longer
-# compare with random
-# train probe in other language
-
-# finetuning expts
-#   probe task adapter with madx
-#   probe performance correlates with task performance? with different source langauges?
-#   probe performance better for source language? compare with target language probing
-
-#   probe trained on pre-trained model works on fine-tuned model?
-#   similar results after full finetuning?
-
-
-# other structures -> conditional probing?
-# other models -> xmod?
-# relative embeddings?
 
 
 
