@@ -279,7 +279,7 @@ if __name__ == '__main__':
     # epochs
     # how long to train?
     # what's the stopping crieteria?
-    argp.add_argument('--num_train_epochs', type=int, default=100)
+    argp.add_argument('--num_train_epochs', type=int, default=200)
     # learning rate
     argp.add_argument('--learning_rate', type=float, default=3e-4)  # 5e-5
     # train batch size
