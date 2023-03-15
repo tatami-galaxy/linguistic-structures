@@ -279,7 +279,7 @@ if __name__ == '__main__':
     # epochs
     # how long to train?
     # what's the stopping crieteria?
-    argp.add_argument('--num_train_epochs', type=int, default=200)
+    argp.add_argument('--num_train_epochs', type=int, default=100)
     # learning rate
     argp.add_argument('--learning_rate', type=float, default=3e-4)  # 5e-5
     # train batch size
@@ -318,12 +318,16 @@ if __name__ == '__main__':
     # dataset
     argp.add_argument('--dataset_name', type=str, default='universal_dependencies')
     # language
+    # set tgt lang
+    # is
     argp.add_argument('--lang', type=str, default='en')
     # treebank config
     # in order to use only this need to check what configs are in processed data dir
     # if its not this, pass in --process_data
     argp.add_argument('--config', type=str, default='en_pud') # make sure this is not None
     # multiple configs
+    # is
+    # ['is_icepahc', 'is_pud']
     argp.add_argument(
         '--config_list',
         type=list[str],
@@ -436,6 +440,7 @@ if __name__ == '__main__':
 
     # model
     # a base model without any specific head
+    print('model : {}'.format(args.model_name))
     model = XLMRobertaModel.from_pretrained(args.model_name)
 
 
@@ -628,13 +633,17 @@ if __name__ == '__main__':
 
 # add wandb support
 # train for longer
-# compare with random
+# compare with baseline
 # train probe in other language
 
 # finetuning expts
 #   probe task adapter with madx
 #   probe performance correlates with task performance? with different source langauges?
 #   probe performance better for source language? compare with target language probing
+#       target language probing
+#       source language UD with source lang adapter + task adapter
+#       target language UD with source lang adapter + task adapter
+#       target language UD with target lang adapter + task adapter
 
 #   probe trained on pre-trained model works on fine-tuned model?
 #   similar results after full finetuning?
