@@ -639,6 +639,7 @@ if __name__ == '__main__':
                 )
 
                 #rep = outputs.last_hidden_state ## change to layer rep
+                # rep is after passing through task adapter of the layer
                 rep = outputs.hidden_states[args.embed_layer + 1] # 0 : embedding layer
                 pred_dist = probe(rep, word_ids, label_mask, label_mask.shape[-1])
 

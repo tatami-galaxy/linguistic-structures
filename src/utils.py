@@ -17,7 +17,7 @@ class DistanceProbe(nn.Module):
         if self.probe_rank is None:  # dxd transform by default
             self.probe_rank = self.model_dim
         self.proj = nn.Parameter(data = torch.zeros(self.model_dim, self.probe_rank))  # projecting transformation 
-        nn.init.uniform_(self.proj, -0.05, 0.05)
+        nn.init.uniform_(self.proj, -0.001, 0.001) # 0.05
 
 
     def del_embeds(self, hidden, ids):
