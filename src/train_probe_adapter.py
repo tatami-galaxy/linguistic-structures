@@ -327,8 +327,10 @@ if __name__ == '__main__':
     ## Data Args ##
     # dataset
     argp.add_argument('--dataset_name', type=str, default='universal_dependencies')
-    # language
+    # dataset language
     argp.add_argument('--lang', type=str, default='en')
+    # adapter src language
+    argp.add_argument('--src_lang', type=str, default='en')
     # treebank config
     # in order to use only this need to check what configs are in processed data dir
     # if its not this, pass in --process_data
@@ -337,7 +339,8 @@ if __name__ == '__main__':
     argp.add_argument(
         '--config_list',
         type=list[str],
-        default=['en_ewt', 'en_gum', 'en_lines', 'en_partut', 'en_pronouns', 'en_pud'])
+        default=['is_icepahc', 'is_pud'])
+        #default=['en_ewt', 'en_gum', 'en_lines', 'en_partut', 'en_pronouns', 'en_pud'])
     # use all configs
     argp.add_argument('--all_configs', default=False, action=argparse.BooleanOptionalAction)
     # minimum sentence length
@@ -469,14 +472,14 @@ if __name__ == '__main__':
 
         # load source language adapter
         lang_adapter_config = AdapterConfig.load("pfeiffer", reduction_factor=2)
-        model.load_adapter(args.lang+"/wiki@ukp", config=lang_adapter_config) # leave_out=[11])
+        model.load_adapter(args.src_lang+"/wiki@ukp", config=lang_adapter_config) # leave_out=[11])
         # add a new task adapter for NER
         model.add_adapter("ner")  # name = ner
         # NER tagging head
         model.add_tagging_head("ner_head", num_labels=len(labels))  # name = ner_head
 
     # stack on top of src lang adapter
-    model.active_adapters = Stack(args.lang, "ner")
+    model.active_adapters = Stack(args.src_lang, "ner")
 
 
     # probe
