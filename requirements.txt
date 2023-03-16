@@ -11,4 +11,5 @@ evaluate
 conllu
 sentencepiece
 seqeval
+gdown
 
