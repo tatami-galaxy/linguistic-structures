@@ -486,7 +486,10 @@ if __name__ == '__main__':
 
 
     if args.tgt_adapter:
-        model.load_adapter(args.tgt_lang+"/wiki@ukp", config=lang_adapter_config) # leave_out=[11])
+        model.load_adapter(
+            args.tgt_lang+"/wiki@ukp",
+            config=lang_adapter_config,
+            model_name=args.model_name) # leave_out=[11])
         # stack on top of tgt lang adapter
         model.active_adapters = Stack(args.tgt_lang, "ner")
     else:
