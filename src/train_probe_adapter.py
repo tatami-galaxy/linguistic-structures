@@ -316,6 +316,8 @@ if __name__ == '__main__':
     argp.add_argument('--load_pretrained_model', default=False, action=argparse.BooleanOptionalAction)
     # pretrained model location wrt project root
     argp.add_argument('--pretrained_model', type=str, default=None)
+    # switch lang aapter
+    argp.add_argument('--tgt_adapter', default=False, action=argparse.BooleanOptionalAction)
     # early stop
     argp.add_argument('--early_stop', default=False, action=argparse.BooleanOptionalAction)
     # early stop patience
@@ -331,6 +333,8 @@ if __name__ == '__main__':
     argp.add_argument('--lang', type=str, default='en')
     # adapter src language
     argp.add_argument('--src_lang', type=str, default='en')
+    # adapter src language
+    argp.add_argument('--tgt_lang', type=str, default='is')
     # treebank config
     # in order to use only this need to check what configs are in processed data dir
     # if its not this, pass in --process_data
@@ -478,8 +482,14 @@ if __name__ == '__main__':
         # NER tagging head
         model.add_tagging_head("ner_head", num_labels=len(labels))  # name = ner_head
 
-    # stack on top of src lang adapter
-    model.active_adapters = Stack(args.src_lang, "ner")
+
+    if args.tgt_adapter:
+        model.load_adapter(args.tgt_lang+"/wiki@ukp", config=lang_adapter_config) # leave_out=[11])
+        # stack on top of tgt lang adapter
+        model.active_adapters = Stack(args.tgt_lang, "ner")
+    else:
+        # stack on top of src lang adapter
+        model.active_adapters = Stack(args.src_lang, "ner")
 
 
     # probe
