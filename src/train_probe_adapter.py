@@ -455,6 +455,8 @@ if __name__ == '__main__':
     print('model : {}'.format(args.model_name))
 
     #config = AutoConfig.from_pretrained(args.model_name, num_labels=len(labels), label2id=label_2_id, id2label=id_2_label)
+    # load source language adapter
+    lang_adapter_config = AdapterConfig.load("pfeiffer", reduction_factor=2)
 
     # load finetuned model
     if args.load_pretrained_model:
@@ -475,7 +477,7 @@ if __name__ == '__main__':
         model = XLMRobertaAdapterModel.from_pretrained(args.model_name, config=config)
 
         # load source language adapter
-        lang_adapter_config = AdapterConfig.load("pfeiffer", reduction_factor=2)
+        #lang_adapter_config = AdapterConfig.load("pfeiffer", reduction_factor=2)
         model.load_adapter(args.src_lang+"/wiki@ukp", config=lang_adapter_config) # leave_out=[11])
         # add a new task adapter for NER
         model.add_adapter("ner")  # name = ner
