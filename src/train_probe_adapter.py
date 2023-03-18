@@ -310,7 +310,7 @@ if __name__ == '__main__':
     argp.add_argument('--max_test_samples', type=int, default=None)
     # pretrained probe
     argp.add_argument('--load_pretrained_probe', default=False, action=argparse.BooleanOptionalAction)
-    # pretrained probe location
+    # pretrained probe location relative to repo root
     argp.add_argument('--pretrained_probe', type=str, default=None)
     # pretrained model
     argp.add_argument('--load_pretrained_model', default=False, action=argparse.BooleanOptionalAction)
@@ -506,11 +506,12 @@ if __name__ == '__main__':
             raise ValueError(
             f"pass in pretrained probe (--pretrained_probe)"
         )
+        pretrained_probe = root+'/'+args.pretrained_probe
         print('loading pretrained probe')
         if torch.cuda.is_available():
-            probe.load_state_dict(torch.load(args.pretrained_probe)) 
+            probe.load_state_dict(torch.load(pretrained_probe)) 
         else:
-            probe.load_state_dict(torch.load(args.pretrained_probe, map_location=torch.device('cpu')))
+            probe.load_state_dict(torch.load(pretrained_probe, map_location=torch.device('cpu')))
 
 
     # loss function
