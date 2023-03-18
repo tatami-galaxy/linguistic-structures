@@ -343,8 +343,8 @@ if __name__ == '__main__':
     argp.add_argument(
         '--config_list',
         type=list[str],
-        default=['is_icepahc', 'is_pud'])
-        #default=['en_ewt', 'en_gum', 'en_lines', 'en_partut', 'en_pronouns', 'en_pud'])
+        #default=['is_icepahc', 'is_pud'])
+        default=['en_ewt', 'en_gum', 'en_lines', 'en_partut', 'en_pronouns', 'en_pud'])
     # use all configs
     argp.add_argument('--all_configs', default=False, action=argparse.BooleanOptionalAction)
     # minimum sentence length
