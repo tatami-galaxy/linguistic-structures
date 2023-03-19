@@ -234,6 +234,9 @@ class UD:
         # filter very small sentences #
         dataset = dataset.filter(lambda example: len(example['head']) >= args.min_length)
 
+        # filter very large sentences #
+        dataset = dataset.filter(lambda example: len(example['head']) <= args.max_length)
+
         # number of tokens in UD <= number of tokens in tokenized text
         # need to map tokenized tokens to UD tokens
         if args.task == 'node_distance':
@@ -272,8 +275,6 @@ if __name__ == '__main__':
     argp.add_argument('--model_name', type=str, default='xlm-roberta-base')
     # probe dimension
     argp.add_argument('--probe_rank', type=int, default=None) # 128 or lower than dim
-    # max length
-    argp.add_argument('--max_length', type=int, default=256)
     # training task
     argp.add_argument('--task', type=str, default='node_distance')
     # epochs
@@ -332,15 +333,16 @@ if __name__ == '__main__':
         '--config_list',
         type=list[str],
         nargs="*",
-        default=['is_icepahc', 'is_pud'])
-        #default=['en_ewt', 'en_gum', 'en_lines', 'en_partut', 'en_pronouns', 'en_pud'])
+        #default=['is_icepahc', 'is_pud'])
+        default=['en_ewt', 'en_gum', 'en_lines', 'en_partut', 'en_pronouns', 'en_pud'])
     # use all configs
     argp.add_argument('--all_configs', default=False, action=argparse.BooleanOptionalAction)
     # minimum sentence length
     argp.add_argument('--min_length', type=int, default=4)
     # maximum sentence length
     # do we need this?
-    #argp.add_argument('--max_length', type=int, default=50)
+    # max length
+    argp.add_argument('--max_length', type=int, default=50)
     # process data anyway
     argp.add_argument('--process_data', default=False, action=argparse.BooleanOptionalAction)
     # save and overwrite processed data
